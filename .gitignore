@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+
+# Environment variables (IMPORTANT - never commit this!)
+.env
+
+# Token cache
+.token.json
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/

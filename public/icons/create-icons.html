@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Generate Icons</title>
+</head>
+<body>
+    <canvas id="canvas" width="512" height="512"></canvas>
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Background
+        ctx.fillStyle = '#0f172a';
+        ctx.beginPath();
+        ctx.roundRect(0, 0, 512, 512, 64);
+        ctx.fill();
+        
+        // Chart icon
+        ctx.fillStyle = '#3b82f6';
+        // Up arrow
+        ctx.beginPath();
+        ctx.moveTo(156, 300);
+        ctx.lineTo(256, 150);
+        ctx.lineTo(356, 300);
+        ctx.lineTo(306, 300);
+        ctx.lineTo(306, 380);
+        ctx.lineTo(206, 380);
+        ctx.lineTo(206, 300);
+        ctx.closePath();
+        ctx.fill();
+        
+        // Green candle
+        ctx.fillStyle = '#22c55e';
+        ctx.fillRect(120, 340, 40, 80);
+        
+        // Red candle
+        ctx.fillStyle = '#ef4444';
+        ctx.fillRect(180, 360, 40, 60);
+        
+        // Green candle
+        ctx.fillStyle = '#22c55e';
+        ctx.fillRect(300, 320, 40, 100);
+        
+        // Red candle
+        ctx.fillStyle = '#ef4444';
+        ctx.fillRect(360, 340, 40, 80);
+        
+        // Download
+        const link = document.createElement('a');
+        link.download = 'icon-512.png';
+        link.href = canvas.toDataURL();
+        link.click();
+        
+        // Create 192x192
+        const canvas192 = document.createElement('canvas');
+        canvas192.width = 192;
+        canvas192.height = 192;
+        canvas192.getContext('2d').drawImage(canvas, 0, 0, 192, 192);
+        
+        const link192 = document.createElement('a');
+        link192.download = 'icon-192.png';
+        link192.href = canvas192.toDataURL();
+        link192.click();
+        
+        document.body.innerHTML = '<h2>✅ Icons downloaded! Move them to public/icons/</h2>';
+    </script>
+</body>
+</html>
