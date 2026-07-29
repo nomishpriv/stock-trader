@@ -47,11 +47,14 @@ async function fetchAllStocks() {
 
     const stocks = Object.entries(raw)
       .filter(([sym, s]) => {
-        if (!s.c || +s.c <= 0) return false;
-        if (/R\d*$/.test(sym)) return false;
-        if (s.nm && /right/i.test(s.nm)) return false;
-        return true;
-      })
+    // Skip if no price
+    if (!s.c || +s.c <= 0) return false;
+    
+    // Skip right shares - check the name for "(Right)" or "Right"
+    if (s.nm && /\(right\)|right/i.test(s.nm)) return false;
+    
+    return true;
+})
       .map(([sym, s]) => ({
         symbol: sym,
         name: s.nm,
