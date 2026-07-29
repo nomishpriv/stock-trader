@@ -411,7 +411,16 @@
                     <div class="summary-card"><div class="s-val" id="idxTrendIcon">➖</div><div class="s-label">Volume Trend</div><div style="font-size:11px;font-weight:600" id="idxTrendLabel">-</div></div>
                     <div class="summary-card"><div class="s-val" id="idxPeakTime">-</div><div class="s-label">Peak Volume Time</div><div style="font-size:11px" id="idxPeakVol">-</div></div>
                 </div>
-                <div class="idx-table-wrapper"><table class="idx-table"><thead><tr><th>Time</th><th>KSE-100</th><th>Change</th><th>%</th><th>Volume</th><th>Sig</th></tr></thead><tbody id="idxTableBody"><tr><td colspan="6" style="padding:20px;color:var(--text2)">Loading index data...</td></tr></tbody></table></div>
+                <div class="idx-table-wrapper"><table class="idx-table"><thead><tr>
+    <th>Time</th>
+    <th>KSE-100</th>
+    <th>Change</th>
+    <th>%</th>
+    <th>+Value</th>
+    <th>Volume</th>
+    <th>Sig</th>
+    <th>Session</th>
+</tr></thead><tbody id="idxTableBody"><tr><td colspan="6" style="padding:20px;color:var(--text2)">Loading index data...</td></tr></tbody></table></div>
             </div>
             <!-- Global Indices Tab -->
 <div id="globalindicesTab" class="tab">
@@ -542,7 +551,24 @@
         const trendIcons={SURGING:'🔥',RISING:'📈',STEADY:'➖',SLOWING:'🔻',FALLING:'📉',INIT:'📊'};document.getElementById('idxTrendIcon').textContent=trendIcons[data.volumeAnalysis?.trend]||'📊';document.getElementById('idxTrendLabel').textContent=data.volumeAnalysis?.trend||'INIT';document.getElementById('idxPeakTime').textContent=data.volumeAnalysis?.peakTime||'-';document.getElementById('idxPeakVol').textContent=data.volumeAnalysis?.peakVolume?formatVol(data.volumeAnalysis.peakVolume):'-';
         const entries=kse.entries||[];if(!entries.length){document.getElementById('idxTableBody').innerHTML='<tr><td colspan="6" style="padding:20px;color:var(--text2)">No entries yet — data collects every 15 min</td></tr>';return}
         const maxVol=Math.max(...entries.map(e=>e.volume),1);
-        document.getElementById('idxTableBody').innerHTML=entries.sort((a,b)=>b.time.localeCompare(a.time)).map(e=>{const chClass=e.changePercent>=0?'up':'down';const volClass=e.volume>maxVol*0.7?'vol-high':e.volume<maxVol*0.3?'vol-low':'';const signal=e.changePercent>0.5?'🟢':e.changePercent<-0.5?'🔴':'⚪';return`<tr><td class="time-col">${e.time}</td><td><b>${e.value?.toLocaleString()}</b></td><td class="${chClass}">${e.change>=0?'+':''}${e.change?.toFixed(2)||'0'}</td><td class="${chClass}">${e.changePercent>=0?'+':''}${e.changePercent?.toFixed(2)}%</td><td class="${volClass}">${formatVol(e.volume)}</td><td>${signal}</td></tr>`}).join('')}
+        document.getElementById('idxTableBody').innerHTML = entries.sort((a,b) => b.time.localeCompare(a.time)).map(e => {
+    const chClass = e.changePercent >= 0 ? 'up' : 'down';
+    const volClass = e.volume > maxVol * 0.7 ? 'vol-high' : e.volume < maxVol * 0.3 ? 'vol-low' : '';
+    const signal = e.changePercent > 0.5 ? '🟢' : e.changePercent < -0.5 ? '🔴' : '⚪';
+    const valAdded = e.valueAdded || 0;
+    const valClass = valAdded >= 0 ? 'up' : 'down';
+    const sessionLabel = e.session || '-';
+    return `<tr>
+        <td class="time-col">${e.time}</td>
+        <td><b>${e.value?.toLocaleString()}</b></td>
+        <td class="${chClass}">${e.change >= 0 ? '+' : ''}${e.change?.toFixed(2) || '0'}</td>
+        <td class="${chClass}">${e.changePercent >= 0 ? '+' : ''}${e.changePercent?.toFixed(2)}%</td>
+        <td class="${valClass}">${valAdded >= 0 ? '+' : ''}${valAdded.toFixed(2)}</td>
+        <td class="${volClass}">${formatVol(e.volume)}</td>
+        <td>${signal}</td>
+        <td style="font-size:9px;color:var(--text2)">${sessionLabel}</td>
+    </tr>`;
+}).join('');}
 
     // ============ ORDER FLOW ============
     function renderOrderFlow(data){

@@ -15,7 +15,6 @@ class IndexTrackerService {
             if (fs.existsSync(DATA_FILE)) {
                 const raw = fs.readFileSync(DATA_FILE, 'utf8');
                 const data = JSON.parse(raw);
-                // Check if data is from today
                 const today = new Date().toISOString().split('T')[0];
                 if (data.date === today) {
                     return data;
@@ -23,11 +22,17 @@ class IndexTrackerService {
             }
         } catch (e) {}
         
-        // Fresh data for today
+        return this.createFreshData();
+    }
+
+    createFreshData() {
         return {
             date: new Date().toISOString().split('T')[0],
+            dayOfWeek: new Date().toLocaleDateString('en-US', { weekday: 'long' }),
+            marketSchedule: this.getMarketSchedule(),
             kse100: {
                 open: null,
+                previousClose: null,
                 high: null,
                 low: null,
                 current: null,
@@ -54,8 +59,105 @@ class IndexTrackerService {
                 peakTime: null,
                 peakVolume: 0
             },
+            sessionStatus: 'WAITING', // WAITING, PRE_OPEN, OPEN, BREAK, CLOSED
             lastUpdated: null
         };
+    }
+
+    /**
+     * Get PSX market schedule based on day
+     * Mon-Thu: 9:32 AM - 3:30 PM
+     * Friday: 9:32 AM - 12:00 PM (break), 2:32 PM - 4:30 PM
+     * Sat-Sun: CLOSED
+     */
+    getMarketSchedule() {
+        const day = new Date().getDay(); // 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat
+        
+        if (day === 0 || day === 6) {
+            return { type: 'WEEKEND', sessions: [], note: 'Market Closed - Weekend' };
+        } else if (day === 5) {
+            // Friday
+            return {
+                type: 'FRIDAY',
+                sessions: [
+                    { name: 'Session 1', start: '09:32', end: '12:00', label: 'Morning Session' },
+                    { name: 'Session 2', start: '14:32', end: '16:30', label: 'Afternoon Session' }
+                ],
+                preOpen: { start: '09:15', end: '09:32' },
+                break: { start: '12:00', end: '14:32', label: 'Friday Prayer Break' },
+                note: 'Friday Trading: 9:32-12:00 & 2:32-4:30'
+            };
+        } else {
+            // Monday-Thursday
+            return {
+                type: 'WEEKDAY',
+                sessions: [
+                    { name: 'Continuous', start: '09:32', end: '15:30', label: 'Full Day Trading' }
+                ],
+                preOpen: { start: '09:15', end: '09:32' },
+                note: 'Regular Trading: 9:32 AM - 3:30 PM'
+            };
+        }
+    }
+
+    /**
+     * Check if market is currently open for recording
+     */
+    isRecordingTime() {
+        const now = new Date();
+        const pkTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Karachi' }));
+        const hours = pkTime.getHours();
+        const minutes = pkTime.getMinutes();
+        const day = pkTime.getDay();
+        const timeInMinutes = hours * 60 + minutes;
+
+        // Weekend
+        if (day === 0 || day === 6) return false;
+
+        // Pre-open (record for opening snapshot)
+        const preOpenStart = 9 * 60 + 15;
+        const preOpenEnd = 9 * 60 + 32;
+        if (timeInMinutes >= preOpenStart && timeInMinutes < preOpenEnd) {
+            this.trackerData.sessionStatus = 'PRE_OPEN';
+            return true; // Record pre-open data
+        }
+
+        if (day === 5) {
+            // Friday Session 1: 9:32 - 12:00
+            const fridayStart1 = 9 * 60 + 32;
+            const fridayEnd1 = 12 * 60;
+            if (timeInMinutes >= fridayStart1 && timeInMinutes <= fridayEnd1) {
+                this.trackerData.sessionStatus = 'OPEN';
+                return true;
+            }
+
+            // Friday Break: 12:00 - 14:32
+            const fridayBreakStart = 12 * 60;
+            const fridayBreakEnd = 14 * 60 + 32;
+            if (timeInMinutes > fridayBreakStart && timeInMinutes < fridayBreakEnd) {
+                this.trackerData.sessionStatus = 'BREAK';
+                return false; // Don't record during break
+            }
+
+            // Friday Session 2: 14:32 - 16:30
+            const fridayStart2 = 14 * 60 + 32;
+            const fridayEnd2 = 16 * 60 + 30;
+            if (timeInMinutes >= fridayStart2 && timeInMinutes <= fridayEnd2) {
+                this.trackerData.sessionStatus = 'OPEN';
+                return true;
+            }
+        } else {
+            // Mon-Thu: 9:32 - 15:30
+            const weekdayStart = 9 * 60 + 32;
+            const weekdayEnd = 15 * 60 + 30;
+            if (timeInMinutes >= weekdayStart && timeInMinutes <= weekdayEnd) {
+                this.trackerData.sessionStatus = 'OPEN';
+                return true;
+            }
+        }
+
+        this.trackerData.sessionStatus = 'CLOSED';
+        return false;
     }
 
     saveData() {
@@ -74,25 +176,69 @@ class IndexTrackerService {
      * Record a snapshot of index values
      */
     recordSnapshot(kse100Data, allSharesData) {
+        // Check if data is from today, if not reset
+        const today = new Date().toISOString().split('T')[0];
+        if (this.trackerData.date !== today) {
+            this.trackerData = this.createFreshData();
+        }
+
+        if (!this.isRecordingTime()) {
+            return this.trackerData;
+        }
+
         const now = new Date();
-        const timeStr = now.toTimeString().split(' ')[0].substring(0, 5); // HH:MM
-        
+        const pkTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Karachi' }));
+        const timeStr = pkTime.toTimeString().split(' ')[0].substring(0, 5); // HH:MM
+
+        // Determine session label
+        const hours = pkTime.getHours();
+        const minutes = pkTime.getMinutes();
+        const day = pkTime.getDay();
+        let sessionLabel = 'Regular';
+        if (day === 5) {
+            if (hours < 12 || (hours === 12 && minutes === 0)) {
+                sessionLabel = 'Fri Session 1';
+            } else if (hours >= 14) {
+                sessionLabel = 'Fri Session 2';
+            }
+        }
+
         // KSE-100 entry
         if (kse100Data) {
+            const prevEntry = this.trackerData.kse100.entries.length > 0 
+                ? this.trackerData.kse100.entries[this.trackerData.kse100.entries.length - 1] 
+                : null;
+
             const kseEntry = {
                 time: timeStr,
                 timestamp: now.toISOString(),
+                session: sessionLabel,
                 value: +kse100Data.value || 0,
                 change: +kse100Data.change || 0,
                 changePercent: +kse100Data.changePercent || 0,
                 volume: +kse100Data.volume || 0,
                 high: +kse100Data.high || 0,
-                low: +kse100Data.low || 0
+                low: +kse100Data.low || 0,
+                // Value added since last entry
+                valueAdded: prevEntry ? +((+kse100Data.value || 0) - prevEntry.value).toFixed(2) : 0,
+                // Volume added since last entry
+                volumeAdded: prevEntry ? Math.max(0, (+kse100Data.volume || 0) - prevEntry.volume) : 0,
+                // Cumulative value added from open
+                valueFromOpen: this.trackerData.kse100.open 
+                    ? +((+kse100Data.value || 0) - this.trackerData.kse100.open).toFixed(2) 
+                    : 0
             };
 
-            // Set open if not set
+            // Set open if not set (first entry of the day)
             if (this.trackerData.kse100.open === null) {
                 this.trackerData.kse100.open = kseEntry.value;
+                kseEntry.valueAdded = 0;
+                kseEntry.valueFromOpen = 0;
+            }
+
+            // Set previous close from first real entry
+            if (this.trackerData.kse100.previousClose === null && kseEntry.value > 0) {
+                this.trackerData.kse100.previousClose = kseEntry.value;
             }
 
             // Update high/low
@@ -120,13 +266,20 @@ class IndexTrackerService {
 
         // All Shares entry
         if (allSharesData) {
+            const prevAllEntry = this.trackerData.allShares.entries.length > 0 
+                ? this.trackerData.allShares.entries[this.trackerData.allShares.entries.length - 1] 
+                : null;
+
             const allEntry = {
                 time: timeStr,
                 timestamp: now.toISOString(),
+                session: sessionLabel,
                 value: +allSharesData.value || 0,
                 change: +allSharesData.change || 0,
                 changePercent: +allSharesData.changePercent || 0,
-                volume: +allSharesData.volume || 0
+                volume: +allSharesData.volume || 0,
+                valueAdded: prevAllEntry ? +((+allSharesData.value || 0) - prevAllEntry.value).toFixed(2) : 0,
+                volumeAdded: prevAllEntry ? Math.max(0, (+allSharesData.volume || 0) - prevAllEntry.volume) : 0
             };
 
             if (this.trackerData.allShares.open === null) {
@@ -172,16 +325,14 @@ class IndexTrackerService {
             return;
         }
 
-        const recentEntries = entries.slice(-6); // Last 6 entries (90 minutes)
+        const recentEntries = entries.slice(-6);
         const volumes = recentEntries.map(e => e.volume);
         
-        // Total volume
         this.trackerData.volumeAnalysis.totalVolume = volumes.reduce((s, v) => s + v, 0);
         this.trackerData.volumeAnalysis.avgVolumePerMin = Math.round(
             this.trackerData.volumeAnalysis.totalVolume / (recentEntries.length * 15)
         );
 
-        // Find peak
         let peakEntry = recentEntries[0];
         recentEntries.forEach(e => {
             if (e.volume > peakEntry.volume) peakEntry = e;
@@ -189,15 +340,14 @@ class IndexTrackerService {
         this.trackerData.volumeAnalysis.peakTime = peakEntry.time;
         this.trackerData.volumeAnalysis.peakVolume = peakEntry.volume;
 
-        // Trend analysis
-        const firstHalf = recentEntries.slice(0, Math.floor(recentEntries.length / 2));
-        const secondHalf = recentEntries.slice(Math.floor(recentEntries.length / 2));
-        const firstAvg = firstHalf.reduce((s, e) => s + e.volume, 0) / firstHalf.length;
-        const secondAvg = secondHalf.reduce((s, e) => s + e.volume, 0) / secondHalf.length;
+        const halfIdx = Math.floor(recentEntries.length / 2);
+        const firstHalf = recentEntries.slice(0, halfIdx);
+        const secondHalf = recentEntries.slice(halfIdx);
+        const firstAvg = firstHalf.reduce((s, e) => s + e.volume, 0) / (firstHalf.length || 1);
+        const secondAvg = secondHalf.reduce((s, e) => s + e.volume, 0) / (secondHalf.length || 1);
 
         const remarks = [];
 
-        // Volume trend
         if (secondAvg > firstAvg * 1.3) {
             this.trackerData.volumeAnalysis.trend = 'SURGING';
             remarks.push('🔥 Volume surging — high market participation');
@@ -215,7 +365,6 @@ class IndexTrackerService {
             remarks.push('➖ Volume steady — consistent activity');
         }
 
-        // Volume vs average
         const overallAvg = this.trackerData.volumeAnalysis.totalVolume / recentEntries.length;
         const currentVol = recentEntries[recentEntries.length - 1]?.volume || 0;
         if (currentVol > overallAvg * 1.5) {
@@ -224,10 +373,9 @@ class IndexTrackerService {
             remarks.push('😴 Current volume significantly below average');
         }
 
-        // Index direction with volume
         const firstPrice = recentEntries[0]?.value || 0;
         const lastPrice = recentEntries[recentEntries.length - 1]?.value || 0;
-        const priceChange = ((lastPrice - firstPrice) / firstPrice * 100);
+        const priceChange = ((lastPrice - firstPrice) / (firstPrice || 1) * 100);
 
         if (priceChange > 0.5 && this.trackerData.volumeAnalysis.trend === 'SURGING') {
             remarks.push('🚀 Strong bullish momentum with volume confirmation');
@@ -239,19 +387,25 @@ class IndexTrackerService {
             remarks.push('📉 Declining on low volume — passive selling');
         }
 
+        // Session-specific remark
+        if (this.trackerData.sessionStatus === 'BREAK') {
+            remarks.push('☕ Friday prayer break — market resumes at 2:32 PM');
+        } else if (this.trackerData.sessionStatus === 'PRE_OPEN') {
+            remarks.push('🌅 Pre-open session — orders being collected');
+        }
+
         this.trackerData.volumeAnalysis.remarks = remarks;
     }
 
-    /**
-     * Get current tracker data
-     */
     getTrackerData() {
+        // Check if data is from today
+        const today = new Date().toISOString().split('T')[0];
+        if (this.trackerData.date !== today) {
+            this.trackerData = this.createFreshData();
+        }
         return this.trackerData;
     }
 
-    /**
-     * Get summary for market bar
-     */
     getSummary() {
         return {
             kse100: this.trackerData.kse100.current,
@@ -260,6 +414,8 @@ class IndexTrackerService {
             volumeTrend: this.trackerData.volumeAnalysis.trend,
             volumeRemark: this.trackerData.volumeAnalysis.remarks[0] || '',
             entries: this.trackerData.kse100.entries.length,
+            sessionStatus: this.trackerData.sessionStatus,
+            schedule: this.trackerData.marketSchedule,
             lastUpdated: this.trackerData.lastUpdated
         };
     }
