@@ -44,14 +44,39 @@ async function fetchAllStocks() {
     if (!raw) return [];
 
     const kseData = data?.data?.in?.KSE100;
+    
+    let filteredCount = 0;
+    let rightFilteredCount = 0;
 
     const stocks = Object.entries(raw)
       .filter(([sym, s]) => {
     // Skip if no price
     if (!s.c || +s.c <= 0) return false;
     
-    // Skip right shares - check the name for "(Right)" or "Right"
-    if (s.nm && /\(right\)|right/i.test(s.nm)) return false;
+    // Skip RIGHT shares - name contains "(Right)" or "(R)"
+    if (s.nm && (s.nm.includes('(Right)') || s.nm.includes('(R)'))) {
+        return false;
+    }
+    
+    // Skip symbols ending with R + digits (like SEARLR1, PIBTLR2, POWERR1)
+    if (/R\d+$/.test(sym)) {
+        return false;
+    }
+    
+    // Skip if status is 2 (suspended/delisted/defunct)
+    if (s.st === 2) {
+        return false;
+    }
+    
+    // Skip if shares count is 0 (defunct/non-existent)
+    if (!s.sh || +s.sh === 0) {
+        return false;
+    }
+    
+    // Skip if name is empty
+    if (!s.nm || s.nm.trim() === '') {
+        return false;
+    }
     
     return true;
 })
@@ -84,6 +109,8 @@ async function fetchAllStocks() {
         lastUpdate: s.d,
         signal: calculateSignal(s)
       }));
+
+    console.log(`📊 Total raw: ${Object.entries(raw).length} | Kept: ${stocks.length} | Filtered: ${filteredCount} | Right filtered: ${rightFilteredCount}`);
 
     return {
       stocks,
@@ -266,7 +293,6 @@ wss.on('connection', (ws) => {
             ws.send(JSON.stringify({ type: 'LOGIN_SUCCESS' }));
             broadcast({ type: 'LOGIN_STATUS', loggedIn: true });
             await updateStocks();
-            // Fetch news after login
             fetchNewsAndBroadcast();
           } else {
             ws.send(JSON.stringify({ 
@@ -464,7 +490,6 @@ app.get('/api/orderbook/:symbol', async (req, res) => {
   }
 });
 
-// News API endpoints
 app.get('/api/news/signal', async (req, res) => {
   try {
     const signal = await getQuickSignal();
@@ -505,10 +530,8 @@ async function start() {
     console.log('📡 Fetching initial data...');
     await updateStocks();
     
-    // Stock updates every 3 seconds
     setInterval(updateStocks, UPDATE_INTERVAL);
     
-    // News updates every 90 seconds
     console.log('📰 Fetching initial news...');
     await fetchNewsAndBroadcast();
     setInterval(fetchNewsAndBroadcast, NEWS_INTERVAL);
