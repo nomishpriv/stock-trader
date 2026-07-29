@@ -29,7 +29,7 @@ const CACHE_TTL = 90000;
 const HEADLINE_LIMIT = 12;
 const MAX_AGE_HOURS = 6;
 
-// ─── PSX SECTOR → TICKERS (expanded for better matching) ─────────────────────
+// ─── PSX SECTOR → TICKERS ────────────────────────────────────────────────────
 const SECTOR_TICKERS = {
   'Banking':       ['MEBL', 'MCB', 'UBL', 'HBL', 'BAFL', 'ABL', 'BOP'],
   'Cement':        ['LUCK', 'DGKC', 'CHCC', 'MLCF', 'KOHC', 'FCCL', 'BWCL', 'PIOC'],
@@ -47,7 +47,6 @@ const SECTOR_TICKERS = {
   'Refinery':      ['ATRL', 'NRL', 'PRL'],
 };
 
-// Build reverse lookup: TICKER → SECTOR
 const TICKER_TO_SECTOR = {};
 for (const [sector, tickers] of Object.entries(SECTOR_TICKERS)) {
   for (const ticker of tickers) {
@@ -55,7 +54,6 @@ for (const [sector, tickers] of Object.entries(SECTOR_TICKERS)) {
   }
 }
 
-// Expanded company name keywords for news matching
 const COMPANY_KEYWORDS = {
   'PPL':    ['ppl', 'pakistan petroleum', 'ppl limited'],
   'OGDC':   ['ogdc', 'oil and gas development', 'ogdcl'],
@@ -90,9 +88,7 @@ const sourceHealth = new Map();
 function isSourceHealthy(name) {
   const health = sourceHealth.get(name);
   if (!health) return true;
-  if (health.failCount >= 3 && Date.now() - health.lastFail < 3600000) {
-    return false;
-  }
+  if (health.failCount >= 3 && Date.now() - health.lastFail < 3600000) return false;
   return true;
 }
 
@@ -113,13 +109,8 @@ let pendingPromise = null;
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 const decodeEntities = (str) => str
-  .replace(/&amp;/g, '&')
-  .replace(/&lt;/g, '<')
-  .replace(/&gt;/g, '>')
-  .replace(/&quot;/g, '"')
-  .replace(/&#39;/g, "'")
-  .replace(/<![^>]+>/g, '')
-  .trim();
+  .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+  .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/<![^>]+>/g, '').trim();
 
 function isStale(pubDate) {
   if (!pubDate || isNaN(pubDate)) return false;
@@ -149,272 +140,148 @@ const PSX_KEYWORDS = [
 ];
 
 function isPSXRelevant(title) {
-  const lower = title.toLowerCase();
-  return PSX_KEYWORDS.some(kw => lower.includes(kw));
+  return PSX_KEYWORDS.some(kw => title.toLowerCase().includes(kw));
 }
 
-/**
- * Find which stock symbols a headline mentions
- */
 function findMentionedTickers(title) {
   const lower = title.toLowerCase();
   const mentioned = [];
-  
   for (const [ticker, keywords] of Object.entries(COMPANY_KEYWORDS)) {
-    if (keywords.some(kw => lower.includes(kw))) {
-      mentioned.push(ticker);
-    }
+    if (keywords.some(kw => lower.includes(kw))) mentioned.push(ticker);
   }
-  
-  // Also check for bare ticker mentions (3-5 uppercase letters)
   const tickerRegex = /\b[A-Z]{3,5}\b/g;
   const matches = title.match(tickerRegex) || [];
   for (const match of matches) {
-    if (TICKER_TO_SECTOR[match] && !mentioned.includes(match)) {
-      mentioned.push(match);
-    }
+    if (TICKER_TO_SECTOR[match] && !mentioned.includes(match)) mentioned.push(match);
   }
-  
   return mentioned;
 }
 
-/**
- * Find which sectors a headline affects
- */
 function findAffectedSectors(title) {
   const mentionedTickers = findMentionedTickers(title);
   const sectors = new Set();
-  
   for (const ticker of mentionedTickers) {
     const sector = TICKER_TO_SECTOR[ticker];
     if (sector) sectors.add(sector);
   }
-  
-  // Sector keyword matching
   const lower = title.toLowerCase();
   const sectorKeywords = {
-    'Cement': ['cement', 'construction'],
-    'Oil & Gas': ['oil', 'gas', 'petroleum', 'exploration', 'e&p'],
+    'Cement': ['cement', 'construction'], 'Oil & Gas': ['oil', 'gas', 'petroleum', 'exploration', 'e&p'],
     'Banking': ['bank', 'banking', 'interest rate', 'monetary', 'sbp'],
     'Fertilizer': ['fertilizer', 'fertiliser', 'urea', 'dap'],
     'Power': ['power', 'electricity', 'energy', 'ipp'],
     'Textile': ['textile', 'cotton', 'yarn', 'garment', 'export'],
     'Pharma': ['pharma', 'pharmaceutical', 'drug', 'medicine'],
-    'Steel': ['steel', 'iron', 'metal'],
-    'Automobile': ['auto', 'car', 'vehicle', 'automobile'],
+    'Steel': ['steel', 'iron', 'metal'], 'Automobile': ['auto', 'car', 'vehicle', 'automobile'],
     'Technology': ['tech', 'software', 'it ', 'information technology'],
     'Refinery': ['refinery', 'refining', 'crude'],
   };
-  
   for (const [sector, keywords] of Object.entries(sectorKeywords)) {
-    if (keywords.some(kw => lower.includes(kw))) {
-      sectors.add(sector);
-    }
+    if (keywords.some(kw => lower.includes(kw))) sectors.add(sector);
   }
-  
-  return {
-    sectors: Array.from(sectors),
-    tickers: mentionedTickers,
-  };
+  return { sectors: Array.from(sectors), tickers: mentionedTickers };
 }
 
 // ─── FETCHERS ─────────────────────────────────────────────────────────────────
 async function fetchRSS(source) {
   if (!isSourceHealthy(source.name)) return [];
-
   try {
     const { data } = await axios.get(source.url, {
       timeout: 8000,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': 'application/rss+xml, application/xml, text/xml, */*',
-      },
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', 'Accept': 'application/rss+xml, application/xml, text/xml, */*' },
       maxRedirects: 5,
     });
-
-    if (typeof data === 'string' && data.trim().startsWith('<!DOCTYPE html>')) {
-      recordSourceFail(source.name);
-      return [];
-    }
-
+    if (typeof data === 'string' && data.trim().startsWith('<!DOCTYPE html>')) { recordSourceFail(source.name); return []; }
     const items = [];
     const itemRx = /<item[\s\S]*?<\/item>/gi;
     let m;
-
     while ((m = itemRx.exec(data)) !== null) {
       const block = m[0];
       const titleM = /<title>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/i.exec(block);
       if (!titleM) continue;
-      
       const title = decodeEntities(titleM[1]);
       if (!title || title.length < 15) continue;
-
       const dateM = /<pubDate>([\s\S]*?)<\/pubDate>/i.exec(block);
       const pubDate = dateM ? new Date(dateM[1].trim()) : null;
       if (isStale(pubDate)) continue;
-
       const linkM = /<link>([\s\S]*?)<\/link>/i.exec(block);
       const link = linkM ? decodeEntities(linkM[1]) : null;
-
       const affected = findAffectedSectors(title);
-
-      items.push({
-        title,
-        pubDate,
-        source: source.name,
-        weight: source.weight,
-        isPSX: isPSXRelevant(title),
-        link,
-        affectedSectors: affected.sectors,
-        affectedTickers: affected.tickers,
-      });
+      items.push({ title, pubDate, source: source.name, weight: source.weight, isPSX: isPSXRelevant(title), link, affectedSectors: affected.sectors, affectedTickers: affected.tickers });
     }
-
     if (items.length > 0) recordSourceSuccess(source.name);
     return items;
-  } catch (err) {
-    recordSourceFail(source.name);
-    return [];
-  }
+  } catch (err) { recordSourceFail(source.name); return []; }
 }
 
 async function fetchMettisAPI(source) {
   try {
     const { data: rawData } = await axios.get(source.url, {
       timeout: 8000,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': 'application/json, text/plain, */*',
-      },
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', 'Accept': 'application/json, text/plain, */*' },
     });
-
     let data = rawData;
-    if (typeof data === 'string') {
-      try { data = JSON.parse(data); } catch { return []; }
-    }
-
+    if (typeof data === 'string') { try { data = JSON.parse(data); } catch { return []; } }
     if (!Array.isArray(data)) return [];
-
     return data.map(item => {
       const headingRaw = item?.Headings?.Heading;
       const descRaw = item?.Descriptions?.Description;
-      const title = (Array.isArray(headingRaw) ? headingRaw[0] : headingRaw) ||
-                    (Array.isArray(descRaw) ? descRaw[0] : descRaw) || '';
+      const title = (Array.isArray(headingRaw) ? headingRaw[0] : headingRaw) || (Array.isArray(descRaw) ? descRaw[0] : descRaw) || '';
       if (!title || title.length < 10) return null;
-
       const dateField = item?.ModifyDateTime || item?.PublishedDate || item?.PublishedTime;
       const pubDate = dateField ? new Date(dateField) : null;
       if (isStale(pubDate)) return null;
-
       const tagNode = item?.Tags?.Tag;
       const tags = Array.isArray(tagNode) ? tagNode : (tagNode ? [tagNode] : []);
       const isPSX = tags.some(t => t?.TagName === 'KSE100' || t?.TagType === 'Indices' || t?.TagType === 'Companies');
       const psxCategories = ['Equity', 'FOREX', 'Economy', 'Technical Analysis', 'Company Analysis Research'];
       const isPSXByCategory = psxCategories.some(c => (item?.CategoryName || '').includes(c));
-
       const affected = findAffectedSectors(title);
-
-      return {
-        title,
-        pubDate,
-        source: source.name,
-        weight: 1.5,
-        isPSX: isPSX || isPSXByCategory,
-        link: item?.Link ? `https://mettisglobal.news/news/${item.Link}` : null,
-        affectedSectors: affected.sectors,
-        affectedTickers: affected.tickers,
-      };
+      return { title, pubDate, source: source.name, weight: 1.5, isPSX: isPSX || isPSXByCategory, link: item?.Link ? `https://mettisglobal.news/news/${item.Link}` : null, affectedSectors: affected.sectors, affectedTickers: affected.tickers };
     }).filter(Boolean);
-  } catch (err) {
-    return [];
-  }
+  } catch (err) { return []; }
 }
 
 // ─── AI ANALYSIS ──────────────────────────────────────────────────────────────
-const SYSTEM_PROMPT = `You are an expert PSX intraday analyst. Read headlines and give precise trading signals.
-Return ONLY raw JSON. No markdown.`;
+const SYSTEM_PROMPT = `You are an expert PSX intraday analyst. Read headlines and give precise trading signals. Return ONLY raw JSON. No markdown.`;
 
 function buildUserPrompt(headlines) {
-  return `Today: ${new Date().toLocaleString('en-PK', { timeZone: 'Asia/Karachi' })} PKT
-
-Headlines (last ${MAX_AGE_HOURS}h):
-${headlines.map((h, i) => `${i + 1}. [${h.source}] ${h.title}`).join('\n')}
-
-Return this JSON:
-{
-  "sentiment": "BULLISH" | "BEARISH" | "NEUTRAL",
-  "signal": "STRONG_BUY" | "BUY" | "HOLD" | "SELL" | "STRONG_SELL",
-  "impactScore": <-10 to +10>,
-  "confidence": <0-100>,
-  "kse100Outlook": "UP" | "DOWN" | "SIDEWAYS",
-  "affectedSectors": [
-    {"sector": "<name>", "impact": "POSITIVE"|"NEGATIVE"|"NEUTRAL", "reason": "<1 line>"}
-  ],
-  "topTrades": [
-    {"ticker": "<PSX symbol>", "action": "BUY"|"SELL", "reason": "<1 line>", "riskLevel": "LOW"|"MEDIUM"|"HIGH"}
-  ],
-  "keyRisk": "<biggest risk>",
-  "summary": "<2-line summary>",
-  "immediateAction": "<next 30 min action>"
-}`;
+  return `Today: ${new Date().toLocaleString('en-PK', { timeZone: 'Asia/Karachi' })} PKT\n\nHeadlines (last ${MAX_AGE_HOURS}h):\n${headlines.map((h, i) => `${i + 1}. [${h.source}] ${h.title}`).join('\n')}\n\nReturn this JSON:\n{\n  "sentiment": "BULLISH" | "BEARISH" | "NEUTRAL",\n  "signal": "STRONG_BUY" | "BUY" | "HOLD" | "SELL" | "STRONG_SELL",\n  "impactScore": <-10 to +10>,\n  "confidence": <0-100>,\n  "kse100Outlook": "UP" | "DOWN" | "SIDEWAYS",\n  "affectedSectors": [\n    {"sector": "<name>", "impact": "POSITIVE"|"NEGATIVE"|"NEUTRAL", "reason": "<1 line>"}\n  ],\n  "topTrades": [\n    {"ticker": "<PSX symbol>", "action": "BUY"|"SELL", "reason": "<1 line>", "riskLevel": "LOW"|"MEDIUM"|"HIGH"}\n  ],\n  "keyRisk": "<biggest risk>",\n  "summary": "<2-line summary>",\n  "immediateAction": "<next 30 min action>"\n}`;
 }
 
 async function analyzeWithGroq(headlines) {
   if (!process.env.GROQ_API_KEY || headlines.length === 0) return null;
-
   const models = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
-
   for (const model of models) {
     try {
       const chat = await groq.chat.completions.create({
-        model,
-        temperature: 0.2,
-        max_tokens: 600,
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: buildUserPrompt(headlines) },
-        ],
+        model, temperature: 0.2, max_tokens: 600,
+        messages: [{ role: 'system', content: SYSTEM_PROMPT }, { role: 'user', content: buildUserPrompt(headlines) }],
       });
-
       const raw = chat.choices[0].message.content;
       const text = raw.replace(/```json|```/gi, '').trim();
-      const start = text.indexOf('{');
-      const end = text.lastIndexOf('}');
+      const start = text.indexOf('{'), end = text.lastIndexOf('}');
       if (start === -1 || end === -1) throw new Error('No JSON');
-
       const parsed = JSON.parse(text.slice(start, end + 1));
       parsed._model = model;
       return parsed;
-    } catch (err) {
-      console.warn(`⚠️ ${model} failed: ${err.message}`);
-    }
+    } catch (err) { console.warn(`⚠️ ${model} failed: ${err.message}`); }
   }
   return null;
 }
 
-// ─── ENRICHMENT ───────────────────────────────────────────────────────────────
 function enrichWithTickers(ai) {
-  if (ai?.affectedSectors) {
-    ai.affectedSectors = ai.affectedSectors.map(s => ({
-      ...s,
-      watchlist: SECTOR_TICKERS[s.sector] || [],
-    }));
-  }
-  if (ai?.topTrades) {
-    ai.topTrades = ai.topTrades.map(t => ({
-      ...t,
-      ticker: t.ticker?.toUpperCase() || 'N/A',
-    }));
-  }
+  if (ai?.affectedSectors) ai.affectedSectors = ai.affectedSectors.map(s => ({ ...s, watchlist: SECTOR_TICKERS[s.sector] || [] }));
+  if (ai?.topTrades) ai.topTrades = ai.topTrades.map(t => ({ ...t, ticker: t.ticker?.toUpperCase() || 'N/A' }));
   return ai;
 }
 
 function signalMeta(signal) {
   const map = {
-    STRONG_BUY:  { emoji: '🟢🟢', color: '#00c853', label: 'Strong Buy' },
-    BUY:         { emoji: '🟢',   color: '#69f0ae', label: 'Buy' },
-    HOLD:        { emoji: '🟡',   color: '#ffd740', label: 'Hold' },
-    SELL:        { emoji: '🔴',   color: '#ff6d00', label: 'Sell' },
+    STRONG_BUY: { emoji: '🟢🟢', color: '#00c853', label: 'Strong Buy' },
+    BUY: { emoji: '🟢', color: '#69f0ae', label: 'Buy' },
+    HOLD: { emoji: '🟡', color: '#ffd740', label: 'Hold' },
+    SELL: { emoji: '🔴', color: '#ff6d00', label: 'Sell' },
     STRONG_SELL: { emoji: '🔴🔴', color: '#d50000', label: 'Strong Sell' },
   };
   return map[signal] || map.HOLD;
@@ -423,34 +290,17 @@ function signalMeta(signal) {
 // ─── MAIN EXPORTS ─────────────────────────────────────────────────────────────
 async function getNewsImpact({ forceRefresh = false } = {}) {
   const now = Date.now();
-
-  if (!forceRefresh && cache.data && (now - cache.ts) < CACHE_TTL) {
-    return cache.data;
-  }
-
+  if (!forceRefresh && cache.data && (now - cache.ts) < CACHE_TTL) return cache.data;
   if (pendingPromise) return pendingPromise;
-
-  const startTime = Date.now();
-
   pendingPromise = (async () => {
     try {
-      const [rssResults, mettisResults] = await Promise.all([
-        Promise.all(NEWS_SOURCES.map(fetchRSS)),
-        Promise.all(METTIS_APIS.map(fetchMettisAPI)),
-      ]);
-
+      const [rssResults, mettisResults] = await Promise.all([Promise.all(NEWS_SOURCES.map(fetchRSS)), Promise.all(METTIS_APIS.map(fetchMettisAPI))]);
       const allItems = [...mettisResults.flat(), ...rssResults.flat()];
-      allItems.sort((a, b) => {
-        const aTime = a.pubDate?.getTime?.() || Date.now();
-        const bTime = b.pubDate?.getTime?.() || Date.now();
-        return bTime - aTime;
-      });
-
+      allItems.sort((a, b) => { const aT = a.pubDate?.getTime?.() || Date.now(); const bT = b.pubDate?.getTime?.() || Date.now(); return bT - aT; });
       const deduped = deduplicate(allItems);
       const relevant = deduped.filter(h => h.isPSX || isPSXRelevant(h.title));
       const fallback = deduped.filter(h => !h.isPSX && !isPSXRelevant(h.title));
       const finalList = [...relevant, ...fallback].slice(0, HEADLINE_LIMIT);
-
       const rawAI = await analyzeWithGroq(finalList);
       const aiAnalysis = rawAI ? enrichWithTickers(rawAI) : {
         sentiment: 'NEUTRAL', signal: 'HOLD', impactScore: 0, confidence: 0,
@@ -458,48 +308,19 @@ async function getNewsImpact({ forceRefresh = false } = {}) {
         keyRisk: 'AI unavailable', summary: 'Trade on technicals',
         immediateAction: 'Wait for AI recovery', _model: 'none',
       };
-
       const result = {
-        headlines: finalList.map(h => ({
-          title: h.title,
-          source: h.source,
-          pubDate: h.pubDate instanceof Date ? h.pubDate.toISOString() : (h.pubDate || null),
-          url: h.link || null,
-          affectedSectors: h.affectedSectors || [],
-          affectedTickers: h.affectedTickers || [],
-        })),
-        aiAnalysis,
-        signalMeta: signalMeta(aiAnalysis.signal),
-        meta: {
-          totalFetched: allItems.length,
-          uniqueHeadlines: deduped.length,
-          psxRelevant: relevant.length,
-          analyzedCount: finalList.length,
-          fetchedAt: new Date(now).toISOString(),
-          nextRefreshAt: new Date(now + CACHE_TTL).toISOString(),
-        },
+        headlines: finalList.map(h => ({ title: h.title, source: h.source, pubDate: h.pubDate instanceof Date ? h.pubDate.toISOString() : (h.pubDate || null), url: h.link || null, affectedSectors: h.affectedSectors || [], affectedTickers: h.affectedTickers || [] })),
+        allHeadlines: deduped.map(h => ({ title: h.title, source: h.source, pubDate: h.pubDate instanceof Date ? h.pubDate.toISOString() : (h.pubDate || null), url: h.link || null, isPSX: h.isPSX || isPSXRelevant(h.title), affectedSectors: h.affectedSectors || [], affectedTickers: h.affectedTickers || [] })),
+        aiAnalysis, signalMeta: signalMeta(aiAnalysis.signal),
+        meta: { totalFetched: allItems.length, uniqueHeadlines: deduped.length, psxRelevant: relevant.length, analyzedCount: finalList.length, fetchedAt: new Date(now).toISOString(), nextRefreshAt: new Date(now + CACHE_TTL).toISOString() },
       };
-
       cache = { data: result, ts: now };
       return result;
     } catch (e) {
       console.error('❌ getNewsImpact failed:', e.message);
-      return cache.data || {
-        headlines: [],
-        aiAnalysis: {
-          sentiment: 'NEUTRAL', signal: 'HOLD', impactScore: 0, confidence: 0,
-          kse100Outlook: 'SIDEWAYS', affectedSectors: [], topTrades: [],
-          keyRisk: 'Service unavailable', summary: 'News fetch failed',
-          immediateAction: 'Retry later', _model: 'none',
-        },
-        signalMeta: signalMeta('HOLD'),
-        meta: { fetchedAt: new Date().toISOString() },
-      };
-    } finally {
-      pendingPromise = null;
-    }
+      return cache.data || { headlines: [], allHeadlines: [], aiAnalysis: { sentiment: 'NEUTRAL', signal: 'HOLD', impactScore: 0, confidence: 0, kse100Outlook: 'SIDEWAYS', affectedSectors: [], topTrades: [], keyRisk: 'Service unavailable', summary: 'News fetch failed', immediateAction: 'Retry later', _model: 'none' }, signalMeta: signalMeta('HOLD'), meta: { fetchedAt: new Date().toISOString() } };
+    } finally { pendingPromise = null; }
   })();
-
   return pendingPromise;
 }
 
@@ -507,78 +328,43 @@ async function getQuickSignal() {
   try {
     const impact = await getNewsImpact();
     const { aiAnalysis, signalMeta: meta } = impact;
-    return {
-      signal: aiAnalysis.signal,
-      emoji: meta.emoji,
-      sentiment: aiAnalysis.sentiment,
-      impactScore: aiAnalysis.impactScore,
-      confidence: aiAnalysis.confidence,
-      immediateAction: aiAnalysis.immediateAction,
-      summary: aiAnalysis.summary,
-      topTrades: aiAnalysis.topTrades || [],
-      affectedSectors: aiAnalysis.affectedSectors || [],
-      fetchedAt: impact.meta.fetchedAt,
-    };
+    return { signal: aiAnalysis.signal, emoji: meta.emoji, sentiment: aiAnalysis.sentiment, impactScore: aiAnalysis.impactScore, confidence: aiAnalysis.confidence, immediateAction: aiAnalysis.immediateAction, summary: aiAnalysis.summary, topTrades: aiAnalysis.topTrades || [], affectedSectors: aiAnalysis.affectedSectors || [], fetchedAt: impact.meta.fetchedAt };
   } catch {
-    return {
-      signal: 'HOLD', emoji: '🟡', sentiment: 'NEUTRAL',
-      impactScore: 0, confidence: 0,
-      immediateAction: 'Wait for data', summary: 'News unavailable',
-      topTrades: [], affectedSectors: [],
-      fetchedAt: new Date().toISOString(),
-    };
+    return { signal: 'HOLD', emoji: '🟡', sentiment: 'NEUTRAL', impactScore: 0, confidence: 0, immediateAction: 'Wait for data', summary: 'News unavailable', topTrades: [], affectedSectors: [], fetchedAt: new Date().toISOString() };
   }
 }
 
-/**
- * Get news specifically relevant to a stock symbol
- */
 async function getStockNews(symbol) {
   const impact = await getNewsImpact();
   const upperSymbol = symbol.toUpperCase();
   const sector = TICKER_TO_SECTOR[upperSymbol] || null;
-
-  // Filter headlines mentioning this stock or its sector
-  const relevantHeadlines = impact.headlines.filter(h => {
-    const tickers = h.affectedTickers || [];
-    const sectors = h.affectedSectors || [];
-    return tickers.includes(upperSymbol) || (sector && sectors.includes(sector));
-  }).slice(0, 5);
-
-  // Get sector-specific AI analysis
-  const sectorImpact = sector
-    ? (impact.aiAnalysis.affectedSectors || []).find(s => s.sector === sector)
-    : null;
-
-  // Get stock-specific trade recommendation
+  const relevantHeadlines = impact.headlines.filter(h => { const t = h.affectedTickers || []; const s = h.affectedSectors || []; return t.includes(upperSymbol) || (sector && s.includes(sector)); }).slice(0, 5);
+  const sectorImpact = sector ? (impact.aiAnalysis.affectedSectors || []).find(s => s.sector === sector) : null;
   const stockTrade = (impact.aiAnalysis.topTrades || []).find(t => t.ticker === upperSymbol);
-
-  // Also check headlines that might mention this stock by keyword
   const keywords = COMPANY_KEYWORDS[upperSymbol] || [];
-  const keywordMatches = impact.headlines.filter(h => {
-    const lower = h.title.toLowerCase();
-    return keywords.some(kw => lower.includes(kw));
-  }).slice(0, 3);
+  const keywordMatches = impact.headlines.filter(h => keywords.some(kw => h.title.toLowerCase().includes(kw))).slice(0, 3);
+  return { symbol: upperSymbol, sector, relevantHeadlines: [...relevantHeadlines, ...keywordMatches].slice(0, 5), sectorImpact, stockTrade: stockTrade || null, overallSignal: impact.aiAnalysis.signal || 'HOLD', overallSentiment: impact.aiAnalysis.sentiment || 'NEUTRAL', summary: impact.aiAnalysis.summary || '', immediateAction: impact.aiAnalysis.immediateAction || '', keyRisk: impact.aiAnalysis.keyRisk || '', fetchedAt: impact.meta.fetchedAt };
+}
 
-  return {
-    symbol: upperSymbol,
-    sector,
-    relevantHeadlines: [...relevantHeadlines, ...keywordMatches].slice(0, 5),
-    sectorImpact,
-    stockTrade: stockTrade || null,
-    overallSignal: impact.aiAnalysis.signal || 'HOLD',
-    overallSentiment: impact.aiAnalysis.sentiment || 'NEUTRAL',
-    summary: impact.aiAnalysis.summary || '',
-    immediateAction: impact.aiAnalysis.immediateAction || '',
-    keyRisk: impact.aiAnalysis.keyRisk || '',
-    fetchedAt: impact.meta.fetchedAt,
-  };
+/**
+ * Get ALL headlines from last 24 hours for the news ticker feed
+ */
+async function getNewsTicker() {
+  try {
+    const impact = await getNewsImpact();
+    const now = Date.now();
+    const twentyFourHoursAgo = now - (24 * 60 * 60 * 1000);
+    return (impact.allHeadlines || impact.headlines || [])
+      .filter(h => { if (!h.pubDate) return true; return new Date(h.pubDate).getTime() > twentyFourHoursAgo; })
+      .sort((a, b) => { const aT = a.pubDate ? new Date(a.pubDate).getTime() : now; const bT = b.pubDate ? new Date(b.pubDate).getTime() : now; return bT - aT; });
+  } catch (e) { return []; }
 }
 
 module.exports = {
   getNewsImpact,
   getQuickSignal,
   getStockNews,
+  getNewsTicker,
   SECTOR_TICKERS,
   TICKER_TO_SECTOR,
 };
