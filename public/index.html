@@ -34,10 +34,50 @@
         .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; background: var(--orange); }
         .market-bar { padding: 10px 16px; background: var(--bg3); font-size: 13px; display: flex; gap: 16px; overflow-x: auto; flex-shrink: 0; align-items: center; }
         .market-bar span { white-space: nowrap; padding: 4px 10px; background: var(--bg2); border-radius: 10px; }
-        .bottom-nav { display: flex; background: var(--bg2); border-top: 1px solid var(--bg3); flex-shrink: 0; overflow-x: auto; }
-        .nav-btn { flex: 1; min-width: 40px; padding: 8px 1px; background: none; border: none; color: var(--text2); font-size: 7px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px; }
-        .nav-btn.active { color: var(--blue); }
-        .nav-btn span:first-child { font-size: 13px; }
+        .bottom-nav {
+    display: flex;
+    background: var(--bg2);
+    border-top: 1px solid var(--bg3);
+    flex-shrink: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE/Edge */
+    padding: 4px 2px;
+    gap: 2px;
+}
+.bottom-nav::-webkit-scrollbar {
+    display: none; /* Chrome/Safari */
+}
+        .nav-btn {
+    flex: 0 0 auto; /* Don't shrink, keep natural size */
+    min-width: 52px;
+    padding: 8px 6px;
+    background: none;
+    border: none;
+    color: var(--text2);
+    font-size: 9px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    white-space: nowrap;
+    transition: color 0.2s;
+}
+
+        .nav-btn.active {
+    color: var(--blue);
+}
+        .nav-btn span:first-child {
+    font-size: 18px; /* Fixed icon size */
+    line-height: 1;
+}
+.nav-btn .nav-label {
+    font-size: 8px;
+    font-weight: 500;
+}
         .content { flex: 1; overflow-y: auto; padding: 8px; }
         .tab { display: none; }
         .tab.active { display: block; }
@@ -245,6 +285,25 @@
         .of-large-trade { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; background: var(--bg2); border-radius: 6px; margin-bottom: 3px; font-size: 11px; border-left: 3px solid var(--bg3); }
         .of-large-trade.buy { border-left-color: var(--green); }
         .of-large-trade.sell { border-left-color: var(--red); }
+        /* Global Indices */
+.gi-summary-bar { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+.gi-summary-item { background: var(--bg2); padding: 10px; border-radius: 10px; text-align: center; }
+.gi-summary-item .gi-region { font-size: 11px; color: var(--text2); }
+.gi-summary-item .gi-change { font-size: 16px; font-weight: 700; margin-top: 2px; }
+.gi-sentiment-badge { display: inline-block; padding: 5px 14px; border-radius: 12px; font-weight: 700; font-size: 13px; margin-bottom: 10px; }
+.gi-region-title { font-size: 12px; font-weight: 600; color: var(--text2); margin: 10px 0 6px; padding: 4px 8px; background: var(--bg3); border-radius: 6px; }
+.gi-index-row { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: var(--bg2); border-radius: 8px; margin-bottom: 3px; }
+.gi-index-row .gi-flag { font-size: 18px; min-width: 28px; text-align: center; }
+.gi-index-row .gi-name { flex: 1; font-size: 12px; }
+.gi-index-row .gi-name .gi-country { font-size: 9px; color: var(--text2); display: block; }
+.gi-index-row .gi-price { font-size: 13px; font-weight: 600; text-align: right; min-width: 70px; }
+.gi-index-row .gi-change { font-size: 11px; font-weight: 600; text-align: right; min-width: 65px; padding: 3px 8px; border-radius: 8px; }
+.gi-index-row .gi-change.up { background: rgba(34,197,94,0.15); color: var(--green); }
+.gi-index-row .gi-change.down { background: rgba(239,68,68,0.15); color: var(--red); }
+.gi-compare-note { text-align: center; padding: 8px; font-size: 10px; color: var(--text2); margin-top: 8px; }
+.gi-market-state { font-size: 8px; padding: 1px 5px; border-radius: 4px; }
+.gi-market-state.OPEN { background: rgba(34,197,94,0.2); color: var(--green); }
+.gi-market-state.CLOSED { background: rgba(148,163,184,0.2); color: var(--text2); }
     </style>
 </head>
 <body>
@@ -265,16 +324,17 @@
             <span id="kseValue">KSE100: ---</span><span id="kseChange">0.00%</span><span id="marketVol">Vol: ---</span><span id="marketSignal">AI: ---</span>
         </div>
         <nav class="bottom-nav">
-            <button class="nav-btn active" data-tab="market"><span>📊</span>Mkt</button>
-            <button class="nav-btn" data-tab="watchlist"><span>⭐</span>Watch</button>
-            <button class="nav-btn" data-tab="signals"><span>🎯</span>Signal</button>
-            <button class="nav-btn" data-tab="premarket"><span>🔮</span>Pre</button>
-            <button class="nav-btn" data-tab="orderflow"><span>📊</span>Flow</button>
-            <button class="nav-btn" data-tab="news"><span>📰</span>News</button>
-            <button class="nav-btn" data-tab="announcements"><span>📢</span>Ann</button>
-            <button class="nav-btn" data-tab="indextracker"><span>📈</span>Index</button>
-            <button class="nav-btn" data-tab="search"><span>🔍</span>Search</button>
-        </nav>
+    <button class="nav-btn active" data-tab="market"><span>📊</span><span class="nav-label">Market</span></button>
+    <button class="nav-btn" data-tab="watchlist"><span>⭐</span><span class="nav-label">Watch</span></button>
+    <button class="nav-btn" data-tab="signals"><span>🎯</span><span class="nav-label">Signals</span></button>
+    <button class="nav-btn" data-tab="premarket"><span>🔮</span><span class="nav-label">PreMkt</span></button>
+    <button class="nav-btn" data-tab="orderflow"><span>📊</span><span class="nav-label">Flow</span></button>
+    <button class="nav-btn" data-tab="news"><span>📰</span><span class="nav-label">News</span></button>
+    <button class="nav-btn" data-tab="announcements"><span>📢</span><span class="nav-label">Announce</span></button>
+    <button class="nav-btn" data-tab="indextracker"><span>📈</span><span class="nav-label">Index</span></button>
+    <button class="nav-btn" data-tab="globalindices"><span>🌍</span><span class="nav-label">World</span></button>
+    <button class="nav-btn" data-tab="search"><span>🔍</span><span class="nav-label">Search</span></button>
+</nav>
         <div class="content">
             <div id="marketTab" class="tab active">
                 <div class="filter-bar">
@@ -353,6 +413,28 @@
                 </div>
                 <div class="idx-table-wrapper"><table class="idx-table"><thead><tr><th>Time</th><th>KSE-100</th><th>Change</th><th>%</th><th>Volume</th><th>Sig</th></tr></thead><tbody id="idxTableBody"><tr><td colspan="6" style="padding:20px;color:var(--text2)">Loading index data...</td></tr></tbody></table></div>
             </div>
+            <!-- Global Indices Tab -->
+<div id="globalindicesTab" class="tab">
+    <div style="text-align:center;margin-bottom:10px">
+        <span id="giSentimentBadge" class="gi-sentiment-badge" style="background:var(--bg3)">🌍 Loading...</span>
+    </div>
+    <div class="gi-summary-bar">
+        <div class="gi-summary-item">
+            <div class="gi-region">🌏 Asia Pacific</div>
+            <div class="gi-change" id="giAsiaChange" style="color:var(--text2)">--</div>
+        </div>
+        <div class="gi-summary-item">
+            <div class="gi-region">🇪🇺 Europe</div>
+            <div class="gi-change" id="giEuropeChange" style="color:var(--text2)">--</div>
+        </div>
+        <div class="gi-summary-item">
+            <div class="gi-region">🌎 Americas</div>
+            <div class="gi-change" id="giAmericasChange" style="color:var(--text2)">--</div>
+        </div>
+    </div>
+    <div id="giIndicesList"></div>
+    <div class="gi-compare-note">📊 Compare with <b>KSE-100</b>: <span id="giKseCompare" style="font-weight:600">--</span></div>
+</div>
             <div id="searchTab" class="tab">
                 <div class="search-box"><input type="text" id="searchInput" placeholder="Search symbol or name..." autocomplete="off"></div>
                 <div id="searchResults" class="stock-list"></div>
@@ -386,14 +468,14 @@
     let stockMap=new Map(),currentOrderBook=null,orderBookTimer=null,newsSignal=null;
     let preMarketTimerInterval=null;
 
-    function connect(){const p=location.protocol==='https:'?'wss:':'ws:';try{ws=new WebSocket(`${p}//${location.host}`)}catch(e){scheduleReconnect();return}ws.onopen=()=>{connected=true;updateStatus();if(reconnectTimer){clearTimeout(reconnectTimer);reconnectTimer=null}setTimeout(()=>{send({type:'GET_NEWS_SIGNAL'});send({type:'GET_ANNOUNCEMENTS'});send({type:'GET_TRADING_SIGNALS'});send({type:'GET_NEWS_TICKER'});send({type:'GET_INDEX_TRACKER'});send({type:'GET_ORDERFLOW'})},1500)};ws.onclose=()=>{connected=false;updateStatus();scheduleReconnect()};ws.onerror=()=>{connected=false;updateStatus()};ws.onmessage=(e)=>{try{handleMessage(JSON.parse(e.data))}catch(err){}}}
+    function connect(){const p=location.protocol==='https:'?'wss:':'ws:';try{ws=new WebSocket(`${p}//${location.host}`)}catch(e){scheduleReconnect();return}ws.onopen=()=>{connected=true;updateStatus();if(reconnectTimer){clearTimeout(reconnectTimer);reconnectTimer=null}setTimeout(()=>{send({type:'GET_NEWS_SIGNAL'});send({type:'GET_ANNOUNCEMENTS'});send({type:'GET_TRADING_SIGNALS'});send({type:'GET_NEWS_TICKER'});send({type:'GET_INDEX_TRACKER'});send({type:'GET_ORDERFLOW'});send({type:'GET_GLOBAL_INDICES'})},1500)};ws.onclose=()=>{connected=false;updateStatus();scheduleReconnect()};ws.onerror=()=>{connected=false;updateStatus()};ws.onmessage=(e)=>{try{handleMessage(JSON.parse(e.data))}catch(err){}}}
     function scheduleReconnect(){if(!reconnectTimer)reconnectTimer=setTimeout(()=>{reconnectTimer=null;connect()},3000)}
     function send(msg){if(ws&&ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify(msg))}
 
     function handleMessage(msg){
         switch(msg.type){
             case'LOGIN_STATUS':loggedIn=msg.loggedIn;loggedIn?showMain():showLogin(false);updateStatus();break
-            case'LOGIN_SUCCESS':loggedIn=true;showMain();updateStatus();setTimeout(()=>{send({type:'GET_NEWS_SIGNAL'});send({type:'GET_ANNOUNCEMENTS'});send({type:'GET_TRADING_SIGNALS'});send({type:'GET_NEWS_TICKER'});send({type:'GET_INDEX_TRACKER'});send({type:'GET_ORDERFLOW'})},2000);break
+            case'LOGIN_SUCCESS':loggedIn=true;showMain();updateStatus();setTimeout(()=>{send({type:'GET_NEWS_SIGNAL'});send({type:'GET_ANNOUNCEMENTS'});send({type:'GET_TRADING_SIGNALS'});send({type:'GET_NEWS_TICKER'});send({type:'GET_INDEX_TRACKER'});send({type:'GET_ORDERFLOW'});send({type:'GET_GLOBAL_INDICES'})},2000);break
             case'LOGIN_ERROR':showLogin(false,msg.message);break
             case'LOGIN_EXPIRED':loggedIn=false;showLogin(false,'Session expired');updateStatus();break
             case'MARKET_DATA':case'MARKET_UPDATE':if(msg.data&&msg.data.stocks){updateStocksData(msg.data.stocks);kse100=msg.data.kse100;updateMarketBar();if(stocks.length===0||Math.abs(stocks.length-msg.data.stocks.length)>5){stocks=msg.data.stocks;buildStockMap();renderAll()}else updatePricesInPlace(msg.data.stocks);if(currentModalSymbol&&document.getElementById('stockModal').classList.contains('active'))updateModalFromCache(currentModalSymbol);showToast()}break
@@ -411,6 +493,7 @@
             case'INDEX_TRACKER':if(msg.data)renderIndexTracker(msg.data);break
             case'ORDERFLOW':if(msg.data)renderOrderFlow(msg.data);break
             case'ORDERFLOW_SUMMARY':if(msg.data)updateOrderFlowSummary(msg.data);break
+            case'GLOBAL_INDICES':if(msg.data)renderGlobalIndices(msg.data);break
             case'SEARCH_RESULTS':renderSearchResults(msg.data||[]);break
         }
     }
@@ -432,6 +515,7 @@
     function requestNewsTicker(){send({type:'GET_NEWS_TICKER'})}
     function requestIndexTracker(){const btn=document.getElementById('refreshIndexBtn');if(btn){btn.textContent='⏳ Refreshing...';btn.disabled=true}send({type:'GET_INDEX_TRACKER'})}
     function requestOrderFlow(){send({type:'GET_ORDERFLOW'})}
+    function requestGlobalIndices(){send({type:'GET_GLOBAL_INDICES'})}
 
     async function analyzePreMarket(){const btn=document.getElementById('analyzePreMarketBtn');const status=document.getElementById('premarketStatus');btn.disabled=true;btn.textContent='⏳ Analyzing...';btn.style.opacity='0.7';status.style.display='block';status.textContent='Fetching order books...';if(preMarketTimerInterval){clearInterval(preMarketTimerInterval);preMarketTimerInterval=null}send({type:'ANALYZE_PREMARKET'})}
     function renderPreMarketAnalysis(data){
@@ -476,6 +560,22 @@
         const largeTrades=data.largeTrades||[];document.getElementById('ofLargeTrades').innerHTML=largeTrades.length?largeTrades.map(t=>`<div class="of-large-trade ${t.side.toLowerCase()}" onclick="openStock('${t.symbol}')"><span><b>${t.symbol}</b></span><span style="color:${t.side==='BUY'?'var(--green)':'var(--red)'}">${t.side}</span><span>@${t.price?.toFixed(2)}</span><span>${formatVol(t.volume)}</span><span style="font-size:10px;color:var(--text2)">Rs.${(t.value/1000).toFixed(0)}K</span></div>`).join(''):'<div style="text-align:center;padding:10px;color:var(--text2);font-size:12px">No large trades yet</div>'}
     function updateOrderFlowSummary(data){if(data.pressure==='STRONG_BUY'||data.pressure==='BUY'){const ms=document.getElementById('marketSignal');if(ms&&data.buyRatio){const existing=ms.innerHTML;if(!existing.includes('Flow:')){ms.innerHTML+=` <span style="font-size:10px;padding:3px 6px;background:var(--green);color:#000;border-radius:6px">Flow: ${data.buyRatio}% Buy</span>`}}}}
 
+    // ============ GLOBAL INDICES ============
+    function renderGlobalIndices(data){
+        if(!data)return;
+        const badge=document.getElementById('giSentimentBadge');
+        const sentiment=data.marketSummary?.globalSentiment||'NEUTRAL';
+        const sc={BULLISH:{bg:'#22c55e',text:'#000',icon:'🟢'},BEARISH:{bg:'#ef4444',text:'#fff',icon:'🔴'}};
+        const s=sc[sentiment]||{bg:'#f59e0b',text:'#000',icon:'🟡'};
+        if(badge){badge.textContent=`${s.icon} Global Markets: ${sentiment}`;badge.style.background=s.bg;badge.style.color=s.text}
+        const regions=data.marketSummary||{};
+        updateGiRegion('giAsiaChange',regions.asia);updateGiRegion('giEuropeChange',regions.europe);updateGiRegion('giAmericasChange',regions.americas);
+        const grouped=data.grouped||{};let html='';const ri={'Asia':'🌏','Middle East':'🌍','Europe':'🇪🇺','Americas':'🌎','Commodities':'💎'};
+        ['Asia','Middle East','Europe','Americas','Commodities'].forEach(region=>{const indices=grouped[region]||[];if(!indices.length)return;html+=`<div class="gi-region-title">${ri[region]||'📊'} ${region}</div>`;indices.forEach(idx=>{const chgClass=idx.changePercent>=0?'up':'down';const sign=idx.changePercent>=0?'+':'';const stateClass=idx.marketState||'CLOSED';html+=`<div class="gi-index-row"><span class="gi-flag">${idx.flag}</span><span class="gi-name">${idx.name}<span class="gi-country">${idx.country} <span class="gi-market-state ${stateClass}">${stateClass}</span></span></span><span class="gi-price">${idx.price?.toLocaleString()||'--'}</span><span class="gi-change ${chgClass}">${sign}${idx.changePercent?.toFixed(2)}%</span></div>`})});
+        document.getElementById('giIndicesList').innerHTML=html||'<div class="empty-state">No data available</div>';
+        const kseEl=document.getElementById('giKseCompare');if(kseEl&&kse100){const asianAvg=regions.asia?.change||0;const diff=(kse100.changePercent||0)-asianAvg;const out=diff>0;kseEl.textContent=out?`🟢 KSE-100 OUTPERFORMING Asia by +${diff.toFixed(2)}%`:`🔴 KSE-100 UNDERPERFORMING Asia by ${diff.toFixed(2)}%`;kseEl.style.color=out?'var(--green)':'var(--red)'}}
+    function updateGiRegion(elId,rd){const el=document.getElementById(elId);if(!el||!rd)return;const chg=rd.change||0;const sign=chg>=0?'+':'';el.textContent=`${sign}${chg.toFixed(2)}%`;el.style.color=chg>=0?'var(--green)':'var(--red)'}
+
     function renderAnnouncements(data){if(!data)return;const sum=document.getElementById('annSummary');if(sum&&data.topTypes)sum.innerHTML=data.topTypes.map(t=>`<span class="ann-type-badge">${t.icon} ${t.label} (${t.count})</span>`).join('');const list=document.getElementById('annHighImpact');if(list&&data.highImpact)list.innerHTML=data.highImpact.length?data.highImpact.map(a=>`<div class="ann-card" style="border-left-color:${a.color||'var(--blue)'}" onclick="openStock('${a.symbol}')"><div class="ann-sym">${a.symbol} ${a.typeIcon||''}</div><div class="ann-title">${a.title}</div><div class="ann-meta"><span class="ann-score-badge" style="background:${(a.color||'#94a3b8')}22;color:${a.color||'#94a3b8'}">${a.signal||''}</span><span style="color:var(--text2)">${a.typeShort||''}</span>${a.date?`<span style="color:var(--text2)">${a.date}</span>`:''}</div></div>`).join(''):'<div class="empty-state">No announcements today</div>'}
     function renderStockAnnouncement(data){const c=document.getElementById('stockAnnContent');if(!c)return;if(!data){c.innerHTML='<div class="no-news">No announcements</div>';return}c.innerHTML=`<div class="ann-card" style="border-left-color:${data.color||'var(--blue)'}"><div class="ann-sym">${data.typeIcon||''} ${data.typeLabel||'Announcement'}</div><div class="ann-title">${data.title}</div><div class="ann-meta"><span class="ann-score-badge" style="background:${(data.color||'#94a3b8')}22;color:${data.color||'#94a3b8'}">${data.signal||''}</span>${data.quarter?`<span style="color:var(--text2)">${data.quarter}</span>`:''}${data.date?`<span style="color:var(--text2)">${data.date}</span>`:''}</div>${data.details?`<div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:11px">${data.details.eps!==undefined?`<span>EPS: <b>${data.details.eps}</b></span>`:''}${data.details.dividend?`<span>Div: <b>${data.details.dividend}%</b></span>`:''}${data.details.bonus?`<span>Bonus: <b>${data.details.bonus}%</b></span>`:''}${data.details.rightIssue?`<span>Rights: <b>${data.details.rightIssue} @ ${data.details.rightPrice}</b></span>`:''}</div>`:''}</div>`}
     function renderTradingSignals(data){if(!data||!data.length){document.getElementById('signalsList').innerHTML='<div class="empty-state">No signals</div>';return}let f=data;if(currentSignalFilter==='DAY')f=data.filter(s=>s.tradeType.includes('DAY'));else if(currentSignalFilter==='SWING')f=data.filter(s=>s.tradeType.includes('SWING'));else if(currentSignalFilter==='STRONG_BUY')f=data.filter(s=>s.signal==='STRONG_BUY');document.getElementById('signalsList').innerHTML=f.map(s=>`<div class="signal-card" style="border-left-color:${s.color}" onclick="openStock('${s.symbol}')"><div class="signal-header"><div><span style="font-weight:600;font-size:15px">${s.emoji} ${s.symbol}</span><span class="trade-type-badge" style="background:${s.color}22;color:${s.color};margin-left:8px">${s.tradeType}</span></div><span class="signal-score" style="background:${s.color}22;color:${s.color}">${s.signal.replace('_',' ')}</span></div><div style="font-size:13px">Rs. ${s.price?.toFixed(2)} <span style="color:${s.change>=0?'var(--green)':'var(--red)'}">${s.change>=0?'+':''}${s.change?.toFixed(2)}%</span></div><div class="signal-reasons">${s.reasons.map(r=>`<span class="signal-reason-tag">${r}</span>`).join('')}</div><div class="signal-trade-info"><div class="entry"><label>Entry</label><br>${s.entryPrice?.toFixed(2)}</div><div class="target"><label>Target</label><br>${s.targetPrice?.toFixed(2)}</div><div class="stop"><label>Stop</label><br>${s.stopLoss?.toFixed(2)}</div></div><div style="font-size:10px;color:var(--text2);text-align:center;margin-top:4px">R:R ${s.riskReward}:1 | Risk: ${s.riskLevel}</div></div>`).join('')}
@@ -500,7 +600,7 @@
     function showToast(){const t=document.getElementById('toast');t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),1500)}
     function updateStatus(){const d=document.getElementById('statusDot'),t=document.getElementById('statusText');if(connected&&loggedIn){d.style.background='#22c55e';t.textContent='Live'}else if(connected){d.style.background='#f59e0b';t.textContent='Connected'}else{d.style.background='#ef4444';t.textContent='Offline'}}
 
-    document.querySelectorAll('.nav-btn').forEach(btn=>{btn.addEventListener('click',()=>{document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));document.getElementById(btn.dataset.tab+'Tab').classList.add('active');if(btn.dataset.tab==='watchlist')renderWatchlist();if(btn.dataset.tab==='market')renderMarket();if(btn.dataset.tab==='indextracker')requestIndexTracker();if(btn.dataset.tab==='orderflow')requestOrderFlow()})});
+    document.querySelectorAll('.nav-btn').forEach(btn=>{btn.addEventListener('click',()=>{document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));document.getElementById(btn.dataset.tab+'Tab').classList.add('active');if(btn.dataset.tab==='watchlist')renderWatchlist();if(btn.dataset.tab==='market')renderMarket();if(btn.dataset.tab==='indextracker')requestIndexTracker();if(btn.dataset.tab==='orderflow')requestOrderFlow();if(btn.dataset.tab==='globalindices')requestGlobalIndices()})});
     document.querySelectorAll('[data-filter]').forEach(btn=>{btn.addEventListener('click',()=>{document.querySelectorAll('[data-filter]').forEach(b=>b.classList.remove('active'));btn.classList.add('active');currentFilter=btn.dataset.filter;renderMarket()})});
     document.querySelectorAll('[data-signal-filter]').forEach(btn=>{btn.addEventListener('click',()=>{document.querySelectorAll('[data-signal-filter]').forEach(b=>b.classList.remove('active'));btn.classList.add('active');currentSignalFilter=btn.dataset.signalFilter;send({type:'GET_TRADING_SIGNALS'})})});
     document.getElementById('searchInput').addEventListener('input',e=>{const q=e.target.value.trim();if(q.length>=1)send({type:'SEARCH',query:q});else document.getElementById('searchResults').innerHTML=''});

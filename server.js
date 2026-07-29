@@ -25,6 +25,9 @@ const indexTrackerService = require('./services/indexTrackerService');
 // Import order flow tracker service
 const orderFlowTracker = require('./services/orderFlowTrackerService');
 
+// Import global indices service
+const globalIndicesService = require('./services/globalIndicesService');
+
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
@@ -40,8 +43,9 @@ const UPDATE_INTERVAL = 3000;
 const NEWS_INTERVAL = 90000;
 const ANN_INTERVAL = 300000;
 const INDEX_TRACKER_INTERVAL = 900000;
-const ORDERFLOW_TRACK_INTERVAL = 120000; // 2 minutes
-const ORDERFLOW_BROADCAST_INTERVAL = 30000; // 30 seconds
+const ORDERFLOW_TRACK_INTERVAL = 120000;
+const ORDERFLOW_BROADCAST_INTERVAL = 30000;
+const GLOBAL_INDICES_INTERVAL = 300000; // 5 minutes
 
 // ============ FETCH MARKET DATA ============
 async function fetchMarketData() {
@@ -297,6 +301,13 @@ wss.on('connection', (ws) => {
           } catch (e) { ws.send(JSON.stringify({ type: 'ORDERFLOW', data: null })); }
           break;
 
+        case 'GET_GLOBAL_INDICES':
+          try {
+            const indices = await globalIndicesService.fetchGlobalIndices();
+            ws.send(JSON.stringify({ type: 'GLOBAL_INDICES', data: indices }));
+          } catch (e) { ws.send(JSON.stringify({ type: 'GLOBAL_INDICES', data: null })); }
+          break;
+
         case 'SEARCH':
           const q = (data.query || '').toLowerCase();
           const results = (stockCache.stocks || []).filter(s => s.symbol.toLowerCase().includes(q) || s.name.toLowerCase().includes(q)).slice(0, 20);
@@ -386,20 +397,23 @@ async function start() {
       if (stockCache.kse100) indexTrackerService.recordSnapshot(stockCache.kse100, null);
     }, INDEX_TRACKER_INTERVAL);
     
-    // Order flow tracking every 2 minutes during market hours
     setInterval(async () => {
       if (stockCache.stocks?.length > 0 && tradingSignalService.isMarketOpen()) {
         try { await orderFlowTracker.trackSymbols([], stockCache.stocks); } catch (e) {}
       }
     }, ORDERFLOW_TRACK_INTERVAL);
     
-    // Broadcast order flow summary every 30 seconds
     setInterval(() => {
       if (stockCache.stocks?.length > 0) {
         const summary = orderFlowTracker.getSummary();
         broadcast({ type: 'ORDERFLOW_SUMMARY', data: summary });
       }
     }, ORDERFLOW_BROADCAST_INTERVAL);
+    
+    // Global indices fetch every 5 minutes
+    setInterval(async () => {
+      try { await globalIndicesService.fetchGlobalIndices(); } catch (e) {}
+    }, GLOBAL_INDICES_INTERVAL);
     
     console.log('✅ System ready\n');
   }

@@ -28,6 +28,26 @@
         "volume": 193065858,
         "high": 176935.0343,
         "low": 175631.7433
+      },
+      {
+        "time": "23:45",
+        "timestamp": "2026-07-29T18:45:59.707Z",
+        "value": 176042.9854,
+        "change": -1580.8989000000001,
+        "changePercent": -0.89,
+        "volume": 193065858,
+        "high": 176935.0343,
+        "low": 175631.7433
+      },
+      {
+        "time": "23:52",
+        "timestamp": "2026-07-29T18:52:19.240Z",
+        "value": 176042.9854,
+        "change": -1580.8989000000001,
+        "changePercent": -0.89,
+        "volume": 193065858,
+        "high": 176935.0343,
+        "low": 175631.7433
       }
     ]
   },
@@ -42,7 +62,7 @@
     "entries": []
   },
   "volumeAnalysis": {
-    "totalVolume": 386131716,
+    "totalVolume": 772263432,
     "avgVolumePerMin": 12871057,
     "trend": "STEADY",
     "remarks": [
@@ -51,5 +71,5 @@
     "peakTime": "21:30",
     "peakVolume": 193065858
   },
-  "lastUpdated": "2026-07-29T16:45:57.924Z"
+  "lastUpdated": "2026-07-29T18:52:19.240Z"
 }
