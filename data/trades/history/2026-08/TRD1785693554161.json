@@ -1,0 +1,39 @@
+{
+  "id": "TRD1785693554161",
+  "symbol": "JDWS",
+  "name": "JDW Sugar Mills Limited",
+  "signal": "STRONG_BUY",
+  "tradeType": "SWING | DAY",
+  "source": "SIGNAL_TAB",
+  "status": "CLOSED",
+  "entryPrice": 907.53,
+  "entryDate": "2026-08-02T17:59:14.161Z",
+  "entryTime": "10:59 pm",
+  "targetPrice": 913.17,
+  "stopLoss": 903.69,
+  "riskReward": 1.5,
+  "riskLevel": "LOW",
+  "quantity": 500,
+  "totalCost": 453765,
+  "currentPrice": 907.53,
+  "currentPnl": 0,
+  "currentPnlPercent": 0,
+  "highestPrice": 907.53,
+  "lowestPrice": 907.53,
+  "exitPrice": 907.53,
+  "exitDate": "2026-08-02T17:59:28.995Z",
+  "exitReason": "MANUAL",
+  "averagedDown": false,
+  "averageCount": 0,
+  "averagePrices": [],
+  "notes": [
+    {
+      "time": "2026-08-02T17:59:28.995Z",
+      "note": "Manual close"
+    }
+  ],
+  "updates": [],
+  "finalPnl": 0,
+  "finalPnlPercent": 0,
+  "profit": false
+}

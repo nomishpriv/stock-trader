@@ -81,21 +81,70 @@ class OrderFlowTrackerService {
      * If trade price <= bid price → SELL (aggressive seller)
      * Otherwise → check midpoint
      */
-    classifyTrade(trade, bidPrice, askPrice) {
+    classifyTrade(trade, bidPrice, askPrice, lastPrice, vwap) {
         const price = +trade.price || 0;
         const volume = +trade.volume || 0;
         
         if (!price || !volume) return null;
 
         let side = 'UNKNOWN';
-        
-        if (askPrice && price >= askPrice) {
-            side = 'BUY';  // Bought at ask or higher = aggressive buy
-        } else if (bidPrice && price <= bidPrice) {
-            side = 'SELL'; // Sold at bid or lower = aggressive sell
-        } else if (bidPrice && askPrice) {
-            const mid = (bidPrice + askPrice) / 2;
+        let confidence = 50;
+        let method = 'UNKNOWN';
+        const spread = (askPrice > bidPrice) ? (askPrice - bidPrice) : 0;
+        const mid = spread > 0 ? (bidPrice + askPrice) / 2 : price;
+
+        // ─── 1. AGGRESSIVE AT TOUCH ───
+        if (askPrice > 0 && price >= askPrice - (spread * 0.05)) {
+            // Within 5% of spread from ask = buyer lifting the offer
+            side = 'BUY';
+            confidence = 85;
+            method = 'AT_ASK';
+        } else if (bidPrice > 0 && price <= bidPrice + (spread * 0.05)) {
+            // Within 5% of spread from bid = seller hitting the bid
+            side = 'SELL';
+            confidence = 85;
+            method = 'AT_BID';
+        } else if (bidPrice > 0 && askPrice > 0) {
+            // ─── 2. INSIDE SPREAD ───
             side = price >= mid ? 'BUY' : 'SELL';
+            confidence = 60;
+            method = price >= mid ? 'ABOVE_MID' : 'BELOW_MID';
+
+            // ─── 3. TICK TEST ───
+            if (lastPrice > 0) {
+                if (price > lastPrice) {
+                    side = 'BUY';
+                    confidence = Math.min(90, confidence + 20);
+                    method += '+UPTICK';
+                } else if (price < lastPrice) {
+                    side = 'SELL';
+                    confidence = Math.min(90, confidence + 20);
+                    method += '+DOWNTICK';
+                }
+            }
+
+            // ─── 4. VWAP TEST ───
+            if (vwap > 0) {
+                if (price > vwap && side === 'BUY') {
+                    confidence = Math.min(95, confidence + 10);
+                    method += '+ABOVE_VWAP';
+                } else if (price < vwap && side === 'SELL') {
+                    confidence = Math.min(95, confidence + 10);
+                    method += '+BELOW_VWAP';
+                } else if ((price > vwap && side === 'SELL') || (price < vwap && side === 'BUY')) {
+                    confidence = Math.max(30, confidence - 15);
+                    method += '+CONTRA_VWAP';
+                }
+            }
+        } else {
+            // ─── 5. NO BID/ASK DATA — TICK TEST ONLY ───
+            if (lastPrice > 0) {
+                if (price > lastPrice) { side = 'BUY'; confidence = 55; method = 'UPTICK_ONLY'; }
+                else if (price < lastPrice) { side = 'SELL'; confidence = 55; method = 'DOWNTICK_ONLY'; }
+                else { side = 'BUY'; confidence = 50; method = 'FLAT'; }
+            } else {
+                side = 'BUY'; confidence = 50; method = 'DEFAULT';
+            }
         }
 
         return {
@@ -103,6 +152,8 @@ class OrderFlowTrackerService {
             price,
             volume,
             side,
+            confidence,
+            method,
             value: price * volume
         };
     }
@@ -156,16 +207,22 @@ class OrderFlowTrackerService {
                         netFlow: 0,
                         totalTrades: 0,
                         lastPrice: stock.price,
+                        vwap: 0,           // ✅ ADDED: running VWAP
+                        vwapVolume: 0,     // ✅ ADDED: cumulative volume for VWAP
                         entries: []
                     };
                 }
 
-                const stockData = this.data.stocks[symbol];
-                const bidPrice = stock.bidPrice || stock.price * 0.995;
-                const askPrice = stock.askPrice || stock.price * 1.005;
+                                const stockData = this.data.stocks[symbol];
+                // ✅ FIX: Use actual bid/ask from API; 0 is falsy so use explicit > 0 check
+                const bidPrice = stock.bidPrice > 0 ? stock.bidPrice : 0;
+                const askPrice = stock.askPrice > 0 ? stock.askPrice : 0;
+                const lastPrice = stockData.lastPrice || stock.price || 0;
+                const vwap = stockData.vwap || 0;
+                const avgDailyVol = stock.volAvg10d || 0;
 
                 for (const trade of trades) {
-                    const classified = this.classifyTrade(trade, bidPrice, askPrice);
+                    const classified = this.classifyTrade(trade, bidPrice, askPrice, lastPrice, vwap);
                     if (!classified) continue;
 
                     // Update stock data
@@ -189,8 +246,19 @@ class OrderFlowTrackerService {
                     this.data.summary.totalTrades++;
                     stockData.lastPrice = classified.price;
 
-                    // Track large trades (>50,000 volume or >5M value)
-                    if (classified.volume > 50000 || classified.value > 5000000) {
+                    // ✅ ADDED: Update running VWAP
+                    const prevVwapVol = stockData.vwapVolume;
+                    stockData.vwapVolume += classified.volume;
+                    stockData.vwap = prevVwapVol > 0
+                        ? ((stockData.vwap * prevVwapVol) + (classified.price * classified.volume)) / stockData.vwapVolume
+                        : classified.price;
+
+                    // ✅ FIX: Relative large trade threshold (>0.5% of 10d avg OR >5M value)
+                    const isLargeByVolume = avgDailyVol > 0 
+                        ? classified.volume > avgDailyVol * 0.005 
+                        : classified.volume > 100000;
+                    const isLargeByValue = classified.value > 5000000;
+                    if (isLargeByVolume || isLargeByValue) {
                         this.data.largeTrades.push({
                             symbol,
                             time: classified.time,
@@ -332,18 +400,25 @@ class OrderFlowTrackerService {
 
     getTopStocks(limit = 10) {
         return Object.entries(this.data.stocks)
-            .map(([symbol, data]) => ({
-                symbol,
-                name: data.name,
-                buyVolume: data.buyVolume,
-                sellVolume: data.sellVolume,
-                netFlow: data.netFlow,
-                buyRatio: data.buyVolume + data.sellVolume > 0 
-                    ? +((data.buyVolume / (data.buyVolume + data.sellVolume)) * 100).toFixed(1)
-                    : 50,
-                totalTrades: data.totalTrades,
-                lastPrice: data.lastPrice
-            }))
+            .map(([symbol, data]) => {
+                const totalVol = data.buyVolume + data.sellVolume;
+                return {
+                    symbol,
+                    name: data.name,
+                    buyVolume: data.buyVolume,
+                    sellVolume: data.sellVolume,
+                    netFlow: data.netFlow,
+                    buyRatio: totalVol > 0 
+                        ? +((data.buyVolume / totalVol) * 100).toFixed(1)
+                        : 50,
+                    totalTrades: data.totalTrades,
+                    lastPrice: data.lastPrice,
+                    vwap: data.vwap ? +data.vwap.toFixed(2) : 0,  // ✅ ADDED
+                    avgPrice: totalVol > 0 
+                        ? +(((data.buyVolume * (data.vwap || data.lastPrice)) + (data.sellVolume * (data.vwap || data.lastPrice))) / totalVol).toFixed(2) 
+                        : 0
+                };
+            })
             .sort((a, b) => Math.abs(b.netFlow) - Math.abs(a.netFlow))
             .slice(0, limit);
     }

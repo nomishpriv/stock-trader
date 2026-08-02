@@ -1,0 +1,149 @@
+[
+  {
+    "id": "TRD1785693749569",
+    "symbol": "LOTCHEM",
+    "name": "Lotte Chemical Pakistan Limited",
+    "signal": "STRONG_BUY",
+    "tradeType": "DAY | SWING",
+    "source": "SIGNAL_TAB",
+    "status": "CLOSED",
+    "entryPrice": 26.97,
+    "entryDate": "2026-08-02T18:02:29.569Z",
+    "entryTime": "11:02 pm",
+    "targetPrice": 27.3,
+    "stopLoss": 26.77,
+    "riskReward": 1.7,
+    "riskLevel": "LOW",
+    "quantity": 3375,
+    "totalCost": 91023.75,
+    "currentPrice": 26.97,
+    "currentPnl": 0,
+    "currentPnlPercent": 0,
+    "highestPrice": 26.97,
+    "lowestPrice": 26.97,
+    "exitPrice": 26.97,
+    "exitDate": "2026-08-02T20:13:15.049Z",
+    "exitReason": "MANUAL",
+    "averagedDown": true,
+    "averageCount": 5,
+    "averagePrices": [
+      26.97,
+      26.97,
+      26.97,
+      26.97,
+      {
+        "price": 26.97,
+        "quantity": 1125,
+        "time": "2026-08-02T20:13:07.364Z"
+      }
+    ],
+    "notes": [
+      {
+        "time": "2026-08-02T18:36:31.089Z",
+        "note": "Averaged down: +250 shares @ 26.97. New avg: 26.97"
+      },
+      {
+        "time": "2026-08-02T18:36:38.156Z",
+        "note": "Averaged down: +250 shares @ 26.97. New avg: 26.97"
+      },
+      {
+        "time": "2026-08-02T18:36:58.874Z",
+        "note": "Averaged down: +500 shares @ 26.97. New avg: 26.97"
+      },
+      {
+        "time": "2026-08-02T18:37:11.252Z",
+        "note": "Averaged down: +750 shares @ 26.97. New avg: 26.97"
+      },
+      {
+        "time": "2026-08-02T20:13:07.364Z",
+        "note": "Averaged down: +1125 sh @ 26.97. New avg: 26.97 (Total: 3375 sh, Cost: Rs.91024)"
+      },
+      {
+        "time": "2026-08-02T20:13:15.049Z",
+        "note": "Manual close"
+      }
+    ],
+    "updates": [],
+    "finalPnl": 0,
+    "finalPnlPercent": 0,
+    "profit": false
+  },
+  {
+    "id": "TRD1785693558022",
+    "symbol": "JDWS",
+    "name": "JDW Sugar Mills Limited",
+    "signal": "STRONG_BUY",
+    "tradeType": "SWING | DAY",
+    "source": "SIGNAL_TAB",
+    "status": "CLOSED",
+    "entryPrice": 907.53,
+    "entryDate": "2026-08-02T17:59:18.022Z",
+    "entryTime": "10:59 pm",
+    "targetPrice": 913.17,
+    "stopLoss": 903.69,
+    "riskReward": 1.5,
+    "riskLevel": "LOW",
+    "quantity": 500,
+    "totalCost": 453765,
+    "currentPrice": 907.53,
+    "currentPnl": 0,
+    "currentPnlPercent": 0,
+    "highestPrice": 907.53,
+    "lowestPrice": 907.53,
+    "exitPrice": 907.53,
+    "exitDate": "2026-08-02T17:59:31.432Z",
+    "exitReason": "MANUAL",
+    "averagedDown": false,
+    "averageCount": 0,
+    "averagePrices": [],
+    "notes": [
+      {
+        "time": "2026-08-02T17:59:31.432Z",
+        "note": "Manual close"
+      }
+    ],
+    "updates": [],
+    "finalPnl": 0,
+    "finalPnlPercent": 0,
+    "profit": false
+  },
+  {
+    "id": "TRD1785693554161",
+    "symbol": "JDWS",
+    "name": "JDW Sugar Mills Limited",
+    "signal": "STRONG_BUY",
+    "tradeType": "SWING | DAY",
+    "source": "SIGNAL_TAB",
+    "status": "CLOSED",
+    "entryPrice": 907.53,
+    "entryDate": "2026-08-02T17:59:14.161Z",
+    "entryTime": "10:59 pm",
+    "targetPrice": 913.17,
+    "stopLoss": 903.69,
+    "riskReward": 1.5,
+    "riskLevel": "LOW",
+    "quantity": 500,
+    "totalCost": 453765,
+    "currentPrice": 907.53,
+    "currentPnl": 0,
+    "currentPnlPercent": 0,
+    "highestPrice": 907.53,
+    "lowestPrice": 907.53,
+    "exitPrice": 907.53,
+    "exitDate": "2026-08-02T17:59:28.995Z",
+    "exitReason": "MANUAL",
+    "averagedDown": false,
+    "averageCount": 0,
+    "averagePrices": [],
+    "notes": [
+      {
+        "time": "2026-08-02T17:59:28.995Z",
+        "note": "Manual close"
+      }
+    ],
+    "updates": [],
+    "finalPnl": 0,
+    "finalPnlPercent": 0,
+    "profit": false
+  }
+]

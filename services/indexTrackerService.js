@@ -41,8 +41,9 @@ class IndexTrackerService {
                 volume: 0,
                 entries: []
             },
-            allShares: {
+                        allShares: {
                 open: null,
+                previousClose: null,  // ✅ ADDED
                 high: null,
                 low: null,
                 current: null,
@@ -209,13 +210,19 @@ class IndexTrackerService {
                 ? this.trackerData.kse100.entries[this.trackerData.kse100.entries.length - 1] 
                 : null;
 
+                        const rawValue = +kse100Data.value || 0;
+            const rawChange = +kse100Data.change || 0;
+            // Derive previousClose for fallback calculation
+            const prevClose = this.trackerData.kse100.previousClose || (rawValue - rawChange) || rawValue;
+
             const kseEntry = {
                 time: timeStr,
                 timestamp: now.toISOString(),
                 session: sessionLabel,
-                value: +kse100Data.value || 0,
-                change: +kse100Data.change || 0,
-                changePercent: +kse100Data.changePercent || 0,
+                value: rawValue,
+                change: rawChange,
+                // ✅ FIX: Fallback to self-calculated change% if API omits it
+                changePercent: +kse100Data.changePercent || (prevClose ? +((rawChange / prevClose) * 100).toFixed(2) : 0),
                 volume: +kse100Data.volume || 0,
                 high: +kse100Data.high || 0,
                 low: +kse100Data.low || 0,
@@ -236,9 +243,11 @@ class IndexTrackerService {
                 kseEntry.valueFromOpen = 0;
             }
 
-            // Set previous close from first real entry
+            // ✅ FIX: Calculate previousClose from API data (value - change)
+            // instead of incorrectly using the first intraday tick as previous close
             if (this.trackerData.kse100.previousClose === null && kseEntry.value > 0) {
-                this.trackerData.kse100.previousClose = kseEntry.value;
+                const dayChange = +kse100Data.change || 0;
+                this.trackerData.kse100.previousClose = +(kseEntry.value - dayChange).toFixed(2);
             }
 
             // Update high/low
@@ -282,8 +291,13 @@ class IndexTrackerService {
                 volumeAdded: prevAllEntry ? Math.max(0, (+allSharesData.volume || 0) - prevAllEntry.volume) : 0
             };
 
-            if (this.trackerData.allShares.open === null) {
+                        if (this.trackerData.allShares.open === null) {
                 this.trackerData.allShares.open = allEntry.value;
+            }
+            // ✅ FIX: Also track previousClose for All Shares if API provides change
+            if (this.trackerData.allShares.previousClose === null && allEntry.value > 0) {
+                const allChange = +allSharesData.change || 0;
+                this.trackerData.allShares.previousClose = +(allEntry.value - allChange).toFixed(2);
             }
             if (this.trackerData.allShares.high === null || allEntry.value > this.trackerData.allShares.high) {
                 this.trackerData.allShares.high = allEntry.value;

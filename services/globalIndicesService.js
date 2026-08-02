@@ -86,9 +86,9 @@ class GlobalIndicesService {
                     });
 
                     const meta = data?.chart?.result?.[0]?.meta;
-                    if (meta) {
-                        const price = meta.regularMarketPrice;
-                        const prevClose = meta.previousClose || meta.chartPreviousClose;
+                    if (meta && meta.regularMarketPrice) {
+                        const price = +meta.regularMarketPrice;
+                        const prevClose = +(meta.previousClose || meta.chartPreviousClose || price);
                         const change = price - prevClose;
                         const changePercent = prevClose ? ((change / prevClose) * 100) : 0;
                         
@@ -138,10 +138,12 @@ class GlobalIndicesService {
             }
         });
 
+        const failedCount = GLOBAL_INDICES.length - indices.length;
         const result = {
             indices,
             grouped,
             total: indices.length,
+            failed: failedCount,  // ✅ ADDED: transparency about fetch failures
             timestamp: new Date().toISOString(),
             marketSummary: this.getMarketSummary(indices)
         };
@@ -155,29 +157,42 @@ class GlobalIndicesService {
      */
     convertToYahooSymbol(symbol) {
         const map = {
-            '^N225': '^N225',
-            '^HSI': '^HSI',
-            '^SSEC': '000001.SS',
-            '^BSESN': '^BSESN',
-            '^NSEI': '^NSEI',
-            '^STI': '^STI',
-            '^AXJO': '^AXJO',
-            '^JKSE': '^JKSE',
-            '^TASI': '^TASI.SR',
-            '^DFMGI': '^DFMGI',
-            '^FTSE': '^FTSE',
-            '^GDAXI': '^GDAXI',
-            '^FCHI': '^FCHI',
-            '^STOXX50E': '^STOXX50E',
-            '^GSPC': '^GSPC',
-            '^DJI': '^DJI',
-            '^IXIC': '^IXIC',
-            '^GSPTSE': '^GSPTSE',
-            '^BVSP': '^BVSP',
-            'CL=F': 'CL=F',
-            'BZ=F': 'BZ=F',
-            'GC=F': 'GC=F',
-            'SI=F': 'SI=F',
+            // Asia Pacific
+            '^N225': '^N225',           // Nikkei 225
+            '^HSI': '^HSI',             // Hang Seng
+            '^SSEC': '000001.SS',       // Shanghai Composite
+            '^BSESN': '^BSESN',         // BSE Sensex
+            '^NSEI': '^NSEI',           // Nifty 50  ✅ ADDED
+            '^STI': '^STI',             // Straits Times  ✅ ADDED
+            '^AXJO': '^AXJO',           // ASX 200  ✅ ADDED
+            '^JKSE': '^JKSE',           // Jakarta Composite  ✅ ADDED
+            
+            // Middle East
+            '^TASI': '^TASI.SR',        // Tadawul All Share
+            '^DFMGI': '^DFMGI',         // Dubai Financial
+            '^ADI': '^ADI',             // Abu Dhabi Index  ✅ ADDED
+            '^QE': '^QE',               // Qatar Exchange  ✅ ADDED
+            
+            // Europe
+            '^FTSE': '^FTSE',           // FTSE 100
+            '^GDAXI': '^GDAXI',         // DAX 40
+            '^FCHI': '^FCHI',           // CAC 40
+            '^STOXX50E': '^STOXX50E',   // Euro Stoxx 50
+            '^IBEX': '^IBEX',           // IBEX 35  ✅ ADDED
+            '^MIB': '^FTSEMIB',         // FTSE MIB  ✅ FIXED (was ^MIB, Yahoo uses ^FTSEMIB)
+            
+            // Americas
+            '^GSPC': '^GSPC',           // S&P 500
+            '^DJI': '^DJI',             // Dow Jones
+            '^IXIC': '^IXIC',           // NASDAQ
+            '^GSPTSE': '^GSPTSE',       // TSX Composite  ✅ ADDED
+            '^BVSP': '^BVSP',           // Bovespa  ✅ ADDED
+            
+            // Commodities
+            'CL=F': 'CL=F',             // Crude Oil WTI
+            'BZ=F': 'BZ=F',             // Brent Crude
+            'GC=F': 'GC=F',             // Gold
+            'SI=F': 'SI=F',             // Silver
         };
         return map[symbol] || symbol;
     }
