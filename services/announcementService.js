@@ -40,16 +40,29 @@ function detectType(item) {
   const title = (item.title || '').toLowerCase();
   const code = (item.type || '').toUpperCase();
 
-  if (title.includes('material information')) return 'MI';
-  if (title.includes('financial result')) return 'FR';
-  if (title.includes('dividend') || title.includes('cash dividend')) return 'DIV';
-  if (title.includes('bonus')) return 'BON';
-  if (title.includes('rights issue')) return 'RGT';
-  if (title.includes('stock split') || title.includes('share split')) return 'SPL';
-  if (title.includes('board meeting') || title.includes('meeting of board')) return 'BM';
-  if (title.includes('agm') || title.includes('egm') || title.includes('annual general')) return 'AGM';
+  // Check title first for better accuracy
+  if (title.includes('material information') || title.includes('material / price sensitive')) return 'MI';
+  if (title.includes('financial result') || title.includes('financial results') || 
+      title.includes('quarterly report') || title.includes('annual report') ||
+      title.includes('quarterly accounts') || title.includes('annual accounts')) return 'FR';
+  if (title.includes('dividend') || title.includes('cash dividend') || 
+      title.includes('interim dividend') || title.includes('final dividend')) return 'DIV';
+  if (title.includes('bonus') || title.includes('bonus shares') || 
+      title.includes('bonus issue')) return 'BON';
+  if (title.includes('rights issue') || title.includes('right issue') || 
+      title.includes('right shares')) return 'RGT';
+  if (title.includes('stock split') || title.includes('share split') || 
+      title.includes('sub-division')) return 'SPL';
+  if (title.includes('board meeting') || title.includes('meeting of board') || 
+      title.includes('board of directors meeting')) return 'BM';
+  if (title.includes('agm') || title.includes('egm') || 
+      title.includes('annual general') || title.includes('extraordinary general')) return 'AGM';
+  if (title.includes('corporate briefing') || title.includes('analyst briefing')) return 'E';
 
+  // Fallback to API type code
   if (TYPE_MAP[code]) return code;
+  
+  // Default to Update for general announcements
   return 'U';
 }
 
@@ -76,9 +89,21 @@ function analyze(item) {
 
   // Score from payouts
   const p = item.payouts || {};
-  if (p.dividend > 0) { score += Math.min(6, p.dividend / 5); impact = 'POSITIVE'; signal = `💰 Div ${p.dividend}%`; }
-  if (p.bonus > 0) { score += Math.min(5, p.bonus / 10); impact = 'POSITIVE'; signal += ` + Bonus ${p.bonus}%`; }
-  if (p.right_issue > 0 && p.right_price > 0) { score -= 2; impact = 'SLIGHTLY_NEGATIVE'; signal = `📜 Rights ${p.right_issue} @ ${p.right_price}`; }
+  if (p.dividend > 0) { 
+    score += Math.min(6, p.dividend / 5); 
+    impact = 'POSITIVE'; 
+    signal = `💰 Div ${p.dividend}%`; 
+  }
+  if (p.bonus > 0) { 
+    score += Math.min(5, p.bonus / 10); 
+    impact = 'POSITIVE'; 
+    signal += ` + Bonus ${p.bonus}%`; 
+  }
+  if (p.right_issue > 0 && p.right_price > 0) { 
+    score -= 2; 
+    impact = 'SLIGHTLY_NEGATIVE'; 
+    signal = `📜 Rights ${p.right_issue} @ ${p.right_price}`; 
+  }
 
   // Score from keywords
   let posHits = 0, negHits = 0;
@@ -86,6 +111,10 @@ function analyze(item) {
   NEGATIVE_KW.forEach(kw => { if (lower.includes(kw)) negHits++; });
   score += posHits * 2;
   score -= negHits * 3;
+
+  // Base score for announcement types
+  if (type === 'FR' && score === 0) score = 1; // Financial results are important
+  if (type === 'MI') score += 1; // Material info is important
 
   // Final impact
   score = Math.max(-10, Math.min(10, score));
@@ -97,7 +126,8 @@ function analyze(item) {
   else if (score > -7) impact = 'NEGATIVE';
   else impact = 'STRONG_NEGATIVE';
 
-  const color = score >= 5 ? '#22c55e' : score >= 2 ? '#84cc16' : score <= -5 ? '#ef4444' : score <= -2 ? '#f97316' : '#f59e0b';
+  const color = score >= 5 ? '#22c55e' : score >= 2 ? '#84cc16' : 
+                score <= -5 ? '#ef4444' : score <= -2 ? '#f97316' : '#f59e0b';
 
   return {
     id: item.id,
@@ -136,6 +166,7 @@ async function fetchAnnouncements(dateOverride) {
       params: { from: target, to: target },
       timeout: 10000
     });
+    console.log(`📢 Fetched ${data?.data?.length || 0} announcements for ${target}`);
     return data?.data || [];
   } catch (e) {
     console.error('❌ Announcements fetch failed:', e.message);
@@ -146,17 +177,37 @@ async function fetchAnnouncements(dateOverride) {
 // ─── MAIN EXPORT ─────────────────────────────────────────────────────────────
 async function getAnnouncements({ date, forceRefresh = false } = {}) {
   const now = Date.now();
-  if (!forceRefresh && !date && cache.data && (now - cache.ts) < CACHE_TTL) return cache.data;
+  if (!forceRefresh && !date && cache.data && (now - cache.ts) < CACHE_TTL) {
+    console.log('📢 Using cached announcements');
+    return cache.data;
+  }
 
   const raw = await fetchAnnouncements(date);
+  
+  // Analyze all items and ensure all types are represented
   const analyzed = raw.map(analyze).sort((a, b) => Math.abs(b.score) - Math.abs(a.score));
 
+  // Group by type with ALL types initialized
   const byType = {};
   const typeCounts = {};
+  
+  // Initialize all types
+  Object.keys(TYPE_MAP).forEach(type => {
+    byType[type] = [];
+    typeCounts[type] = 0;
+  });
+
+  // Populate with actual data
   analyzed.forEach(a => {
     if (!byType[a.type]) byType[a.type] = [];
     byType[a.type].push(a);
     typeCounts[a.type] = (typeCounts[a.type] || 0) + 1;
+  });
+
+  // Remove empty types for cleaner display
+  Object.keys(byType).forEach(type => {
+    if (byType[type].length === 0) delete byType[type];
+    if (typeCounts[type] === 0) delete typeCounts[type];
   });
 
   const result = {
@@ -169,15 +220,29 @@ async function getAnnouncements({ date, forceRefresh = false } = {}) {
     dividends: analyzed.filter(a => a.type === 'DIV'),
     boardMeetings: analyzed.filter(a => a.type === 'BM'),
     materialInfo: analyzed.filter(a => a.type === 'MI'),
+    updates: analyzed.filter(a => a.type === 'U'),
     byType,
     typeCounts,
+    // Available tabs for UI filtering
+    tabs: Object.entries(typeCounts).map(([type, count]) => ({
+      type,
+      count,
+      icon: TYPE_MAP[type]?.icon || '📢',
+      label: TYPE_MAP[type]?.short || type,
+      color: TYPE_MAP[type]?.color || '#9ca3af'
+    })).sort((a, b) => b.count - a.count),
     timestamp: new Date().toISOString(),
   };
 
-  if (!date) { cache = { data: result, ts: now }; }
+  if (!date) { 
+    cache = { data: result, ts: now }; 
+    console.log(`📢 Processed ${analyzed.length} announcements with ${Object.keys(typeCounts).length} types`);
+  }
+  
   return result;
 }
 
+// ─── HELPER FUNCTIONS ───────────────────────────────────────────────────────
 async function getStockAnnouncement(symbol) {
   const data = await getAnnouncements();
   return data.announcements.find(a => a.symbol === symbol.toUpperCase()) || null;
@@ -188,11 +253,42 @@ async function getQuickAnnouncements() {
   return {
     total: data.total,
     highImpact: data.highImpact.slice(0, 5),
-    topTypes: Object.entries(data.typeCounts).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([type, count]) => ({
-      type, count, icon: TYPE_MAP[type]?.icon || '📢', label: TYPE_MAP[type]?.short || type
-    })),
+    topTypes: Object.entries(data.typeCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([type, count]) => ({
+        type, 
+        count, 
+        icon: TYPE_MAP[type]?.icon || '📢', 
+        label: TYPE_MAP[type]?.short || type,
+        color: TYPE_MAP[type]?.color || '#9ca3af'
+      })),
     timestamp: data.timestamp,
   };
 }
 
-module.exports = { getAnnouncements, getStockAnnouncement, getQuickAnnouncements, TYPE_MAP };
+// Get announcements filtered by specific type
+async function getAnnouncementsByType(type, { date, forceRefresh = false } = {}) {
+  const data = await getAnnouncements({ date, forceRefresh });
+  return {
+    type,
+    typeInfo: TYPE_MAP[type] || null,
+    announcements: data.byType[type] || [],
+    total: data.typeCounts[type] || 0,
+  };
+}
+
+// Get all available announcement types with counts
+async function getAnnouncementTypes() {
+  const data = await getAnnouncements();
+  return data.tabs;
+}
+
+module.exports = { 
+  getAnnouncements, 
+  getStockAnnouncement, 
+  getQuickAnnouncements,
+  getAnnouncementsByType,
+  getAnnouncementTypes,
+  TYPE_MAP 
+};

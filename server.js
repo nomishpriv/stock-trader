@@ -34,6 +34,15 @@ const tradeJournal = require('./services/tradeJournalService');
 // Import global indices service
 const globalIndicesService = require('./services/globalIndicesService');
 
+
+// Import FIPI/LIPI service
+const { getFipiLipData, getWeeklyTrend } = require('./services/fipiLipService');
+
+const { getSectorForSymbol, getStocksForSector, getAllSectors } = require('./services/sectorMappingService');
+
+const sectorAnalysisService = require('./services/sectorAnalysisService');
+
+
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
@@ -57,6 +66,7 @@ const INSTITUTIONAL_INTERVAL = 45000;
 // ============ FETCH MARKET DATA ============
 async function fetchMarketData() { try { const { data } = await api.get('/market'); return data; } catch (e) { throw e; } }
 
+// In server.js, update fetchAllStocks to filter illiquid stocks:
 async function fetchAllStocks() {
   try {
     const data = await fetchMarketData();
@@ -66,11 +76,21 @@ async function fetchAllStocks() {
     const stocks = Object.entries(raw)
       .filter(([sym, s]) => {
         if (!s.c || +s.c <= 0) return false;
-        if (s.nm) { const name = s.nm.toLowerCase(); if (name.includes('(right)') || name.includes('(r)') || name.endsWith(' right') || name.includes('right)') || name.includes(' right ') || (name.startsWith('right') && name.length < 20)) return false; }
+        // Filter very low priced penny stocks (optional - adjust threshold)
+        if (+s.c < 2 && +s.v < 10000) return false;
+        if (s.nm) { 
+          const name = s.nm.toLowerCase(); 
+          if (name.includes('(right)') || name.includes('(r)') || 
+              name.endsWith(' right') || name.includes('right)') || 
+              name.includes(' right ') || (name.startsWith('right') && name.length < 20)) 
+            return false; 
+        }
         if (/R\d+$/.test(sym)) return false;
         if (s.st === 2) return false;
         if (!s.sh || +s.sh === 0) return false;
         if (!s.nm || s.nm.trim() === '') return false;
+        // Filter stocks with zero volume
+        if (!s.v || +s.v === 0) return false;
         return true;
       })
       .map(([sym, s]) => ({
@@ -80,7 +100,7 @@ async function fetchAllStocks() {
         s1: +(s.pp?.s1 ?? 0), s2: +(s.pp?.s2 ?? 0), pe: +(s.pr ?? 0), eps: +(s.eps ?? 0),
         divYield: +(s.di ?? 0), bidPrice: s.bidp ? +s.bidp : 0, bidVolume: s.bidv ? +s.bidv : 0,
         askPrice: s.askp ? +s.askp : 0, askVolume: s.askv ? +s.askv : 0,
-        upperCircuit: +s.uc, lowerCircuit: +s.lc, status: 'ACTIVE', lastUpdate: s.d,
+        upperCircuit: +s.uc, lowerCircuit: +s.lc, status: 'ACTIVE', lastUpdate: s.d,shares: +s.sh || 0,
         signal: calculateSignal(s)
       }));
     console.log(`📊 Stocks: ${stocks.length} loaded`);
@@ -293,7 +313,56 @@ function calculateQuantity(signal) { const capital = 100000; const riskAmount = 
 // ============ HELPERS ============
 function findSectorForStock(symbol) { return TICKER_TO_SECTOR[symbol.toUpperCase()] || null; }
 async function fetchNewsAndBroadcast() { try { const s = await getQuickSignal(); if (s) broadcast({ type: 'NEWS_SIGNAL', data: s }); } catch (e) {} }
-async function fetchAnnouncementsAndBroadcast() { try { const a = await getQuickAnnouncements(); if (a) broadcast({ type: 'ANNOUNCEMENTS', data: a }); } catch (e) {} }
+async function fetchAnnouncementsAndBroadcast() { 
+    try { 
+        const a = await getAnnouncements(); 
+        if (a) {
+            broadcast({ 
+                type: 'ANNOUNCEMENTS', 
+                data: {
+                    announcements: a.announcements || [],
+                    total: a.total || 0,
+                    highImpact: a.highImpact || [],
+                    tabs: a.tabs || [],
+                    byType: a.byType || {},
+                    typeCounts: a.typeCounts || {},
+                    positive: a.positive || [],
+                    negative: a.negative || [],
+                    results: a.results || [],
+                    dividends: a.dividends || [],
+                    boardMeetings: a.boardMeetings || [],
+                    materialInfo: a.materialInfo || [],
+                    updates: a.updates || [],
+                    timestamp: a.timestamp
+                }
+            });
+        }
+    } catch (e) {
+        console.error('Announcements broadcast error:', e);
+    }
+}
+
+async function buildSectorAnalysis() {
+    const [fipiData, newsSignal, announcements] = await Promise.all([
+        getFipiLipData().catch(() => null),
+        getQuickSignal().catch(() => null),
+        getAnnouncements().catch(() => null)
+    ]);
+    const tradeSignals = tradingSignalService.generateSignals(
+        stockCache.stocks || [],
+        newsSignal,
+        announcements
+    );
+    return sectorAnalysisService.analyze(
+        stockCache.stocks || [],
+        fipiData,
+        orderFlowTracker.getTopStocks(50),
+        { signals: institutionalTracker.getActiveSignals(50) },
+        tradeSignals,
+        newsSignal,
+        announcements
+    );
+}
 
 // ============ WEBSOCKET ============
 wss.on('connection', (ws) => {
@@ -311,9 +380,46 @@ wss.on('connection', (ws) => {
         case 'GET_NEWS_SIGNAL': try { ws.send(JSON.stringify({ type: 'NEWS_SIGNAL', data: await getQuickSignal() })); } catch (e) { ws.send(JSON.stringify({ type: 'NEWS_SIGNAL', data: null })); } break;
         case 'GET_STOCK_NEWS': if (data.symbol) { try { ws.send(JSON.stringify({ type: 'STOCK_NEWS', symbol: data.symbol, data: await getStockNews(data.symbol) })); } catch (e) { ws.send(JSON.stringify({ type: 'STOCK_NEWS', symbol: data.symbol, data: null })); } } break;
         case 'GET_NEWS_TICKER': try { ws.send(JSON.stringify({ type: 'NEWS_TICKER', data: await getNewsTicker() })); } catch (e) { ws.send(JSON.stringify({ type: 'NEWS_TICKER', data: [] })); } break;
-        case 'GET_ANNOUNCEMENTS': try { ws.send(JSON.stringify({ type: 'ANNOUNCEMENTS', data: await getQuickAnnouncements() })); } catch (e) { ws.send(JSON.stringify({ type: 'ANNOUNCEMENTS', data: null })); } break;
+        case 'GET_ANNOUNCEMENTS': 
+    try { 
+        const annData = await getAnnouncements();
+        ws.send(JSON.stringify({ 
+            type: 'ANNOUNCEMENTS', 
+            data: {
+                announcements: annData.announcements || [],
+                total: annData.total || 0,
+                highImpact: annData.highImpact || [],
+                tabs: annData.tabs || [],
+                byType: annData.byType || {},
+                typeCounts: annData.typeCounts || {},
+                positive: annData.positive || [],
+                negative: annData.negative || [],
+                results: annData.results || [],
+                dividends: annData.dividends || [],
+                boardMeetings: annData.boardMeetings || [],
+                materialInfo: annData.materialInfo || [],
+                updates: annData.updates || [],
+                timestamp: annData.timestamp
+            }
+        }));
+    } catch (e) { 
+        console.error('Announcements error:', e);
+        ws.send(JSON.stringify({ type: 'ANNOUNCEMENTS', data: null })); 
+    } 
+    break;
         case 'GET_STOCK_ANNOUNCEMENT': if (data.symbol) { try { ws.send(JSON.stringify({ type: 'STOCK_ANNOUNCEMENT', symbol: data.symbol, data: await getStockAnnouncement(data.symbol) })); } catch (e) { ws.send(JSON.stringify({ type: 'STOCK_ANNOUNCEMENT', symbol: data.symbol, data: null })); } } break;
-        case 'GET_TRADING_SIGNALS': try { const ns = await getQuickSignal(); const ann = await getAnnouncements(); ws.send(JSON.stringify({ type: 'TRADING_SIGNALS', data: tradingSignalService.generateSignals(stockCache.stocks || [], ns, ann) })); } catch (e) { ws.send(JSON.stringify({ type: 'TRADING_SIGNALS', data: [] })); } break;
+        case 'GET_TRADING_SIGNALS': 
+    try { 
+        const ns = await getQuickSignal(); 
+        const ann = await getAnnouncements(); // This already returns full data
+        ws.send(JSON.stringify({ 
+            type: 'TRADING_SIGNALS', 
+            data: tradingSignalService.generateSignals(stockCache.stocks || [], ns, ann) 
+        })); 
+    } catch (e) { 
+        ws.send(JSON.stringify({ type: 'TRADING_SIGNALS', data: [] })); 
+    } 
+    break;
         case 'GET_PREMARKET': try { ws.send(JSON.stringify({ type: 'PREMARKET', data: await tradingSignalService.analyzePreMarket(stockCache.stocks || [], orderBookService) })); } catch (e) { ws.send(JSON.stringify({ type: 'PREMARKET', data: [] })); } break;
         case 'ANALYZE_PREMARKET': try { ws.send(JSON.stringify({ type: 'PREMARKET_ANALYSIS', data: await tradingSignalService.analyzePreMarketSession(stockCache.stocks || [], orderBookService) })); } catch (e) { ws.send(JSON.stringify({ type: 'PREMARKET_ANALYSIS', data: { isPreMarket: false, message: 'Analysis failed', signals: [] } })); } break;
         case 'GET_INDEX_TRACKER': try { ws.send(JSON.stringify({ type: 'INDEX_TRACKER', data: indexTrackerService.getTrackerData() })); } catch (e) { ws.send(JSON.stringify({ type: 'INDEX_TRACKER', data: null })); } break;
@@ -323,12 +429,56 @@ wss.on('connection', (ws) => {
         case 'GET_INSTITUTIONAL_SIGNALS': try { ws.send(JSON.stringify({ type: 'INSTITUTIONAL_SIGNALS', data: { signals: institutionalTracker.getActiveSignals(50), alerts: institutionalTracker.getAlerts(15) } })); } catch (e) { ws.send(JSON.stringify({ type: 'INSTITUTIONAL_SIGNALS', data: { signals: [], alerts: [] } })); } break;
         case 'GET_STOCK_INSTITUTIONAL': if (data.symbol) { try { ws.send(JSON.stringify({ type: 'STOCK_INSTITUTIONAL', symbol: data.symbol, data: institutionalTracker.getStockHistory(data.symbol) })); } catch (e) { ws.send(JSON.stringify({ type: 'STOCK_INSTITUTIONAL', symbol: data.symbol, data: null })); } } break;
 
+        case 'GET_SECTOR_STOCKS':
+    if (data.sector) {
+        const symbols = getStocksForSector(data.sector);
+        const sectorStocks = (stockCache.stocks || []).filter(s => 
+            symbols.includes(s.symbol.toUpperCase())
+        );
+        ws.send(JSON.stringify({ 
+            type: 'SECTOR_STOCKS', 
+            sector: data.sector,
+            data: sectorStocks 
+        }));
+    }
+    break;
+
+
         // ============ TRADE JOURNAL ============
         case 'OPEN_TRADE': try { ws.send(JSON.stringify({ type: 'TRADE_OPENED', data: tradeJournal.openTrade(data) })); } catch (e) { ws.send(JSON.stringify({ type: 'TRADE_ERROR', message: e.message })); } break;
         case 'CLOSE_TRADE': try { ws.send(JSON.stringify({ type: 'TRADE_CLOSED', data: tradeJournal.closeTrade(data.tradeId, data.exitPrice, data.reason||'MANUAL', data.note) })); } catch (e) { ws.send(JSON.stringify({ type: 'TRADE_ERROR', message: e.message })); } break;
         case 'AVERAGE_DOWN': try { ws.send(JSON.stringify({ type: 'TRADE_AVERAGED', data: tradeJournal.averageDown(data.tradeId, data.quantity, data.price) })); } catch (e) { ws.send(JSON.stringify({ type: 'TRADE_ERROR', message: e.message })); } break;
         case 'GET_TRADES': try { ws.send(JSON.stringify({ type: 'TRADES_DATA', data: tradeJournal.getAllTrades() })); } catch (e) { ws.send(JSON.stringify({ type: 'TRADES_DATA', data: null })); } break;
         case 'TAKE_TRADE_FROM_SIGNAL': try { const { signal } = data; const trade = tradeJournal.openTrade({ symbol: signal.symbol, name: signal.name, signal: signal.signal, tradeType: signal.tradeType||'DAY', entryPrice: signal.entryPrice||signal.price, targetPrice: signal.targetPrice, stopLoss: signal.stopLoss, quantity: data.quantity||calculateQuantity(signal), riskReward: signal.riskReward, riskLevel: signal.riskLevel, source: 'SIGNAL_TAB' }); ws.send(JSON.stringify({ type: 'TRADE_OPENED', data: trade })); } catch (e) { ws.send(JSON.stringify({ type: 'TRADE_ERROR', message: e.message })); } break;
+
+        case 'GET_FIPILIPI':
+    try {
+        const fipiData = await getFipiLipData();
+        ws.send(JSON.stringify({ type: 'FIPILIPI_DATA', data: fipiData }));
+    } catch (e) {
+        ws.send(JSON.stringify({ type: 'FIPILIPI_DATA', data: null }));
+    }
+    break;
+
+case 'GET_FIPILIPI_WEEKLY':
+    try {
+        const weeklyData = await getWeeklyTrend();
+        ws.send(JSON.stringify({ type: 'FIPILIPI_WEEKLY', data: weeklyData }));
+    } catch (e) {
+        ws.send(JSON.stringify({ type: 'FIPILIPI_WEEKLY', data: [] }));
+    }
+    break;
+
+case 'GET_SECTORS':
+    try {
+        const sectors = await buildSectorAnalysis();
+        ws.send(JSON.stringify({ type: 'SECTORS_DATA', data: { sectors } }));
+    } catch (e) {
+        console.error('Sector analysis error:', e);
+        ws.send(JSON.stringify({ type: 'SECTORS_DATA', data: { sectors: [] } }));
+    }
+    break;
+
 
         case 'SEARCH': ws.send(JSON.stringify({ type: 'SEARCH_RESULTS', data: (stockCache.stocks||[]).filter(s => s.symbol.toLowerCase().includes((data.query||'').toLowerCase()) || s.name.toLowerCase().includes((data.query||'').toLowerCase())).slice(0, 20) })); break;
         case 'PING': ws.send(JSON.stringify({ type: 'PONG' })); break;
@@ -380,6 +530,23 @@ async function start() {
     setInterval(() => { if (stockCache.stocks?.length > 0) broadcast({ type: 'ORDERFLOW_SUMMARY', data: orderFlowTracker.getSummary() }); }, ORDERFLOW_BROADCAST_INTERVAL);
     setInterval(async () => { try { await globalIndicesService.fetchGlobalIndices(); } catch (e) {} }, GLOBAL_INDICES_INTERVAL);
     setInterval(async () => { if (stockCache.stocks?.length > 0 && tradingSignalService.isMarketOpen()) { try { const topStocks = stockCache.stocks.sort((a,b)=>b.volume-a.volume).slice(0,15); for (const stock of topStocks) { const ob = orderBookService.getCachedOrderBook(stock.symbol); await institutionalTracker.analyzeStock(stock, ob); } const signals = institutionalTracker.getActiveSignals(60); if (signals.length > 0) broadcast({ type: 'INSTITUTIONAL_SIGNALS', data: { signals, alerts: institutionalTracker.getAlerts(5) } }); } catch (e) {} } }, INSTITUTIONAL_INTERVAL);
+    // FIPI/LIPI data refresh every 5 minutes
+setInterval(async () => {
+    try {
+        const fipiData = await getFipiLipData({ forceRefresh: true });
+        if (fipiData) {
+            broadcast({ type: 'FIPILIPI_DATA', data: fipiData });
+        }
+    } catch (e) {}
+}, 300000);
+// Sector analysis broadcast every 2 minutes
+setInterval(async () => {
+    if (!isLoggedIn || !stockCache.stocks?.length) return;
+    try {
+        const sectors = await buildSectorAnalysis();
+        broadcast({ type: 'SECTORS_DATA', data: { sectors } });
+    } catch (e) {}
+}, 120000);
     console.log('✅ System ready\n');
   }
   const PORT = process.env.PORT || 5001;
