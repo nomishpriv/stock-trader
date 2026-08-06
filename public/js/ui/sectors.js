@@ -1,105 +1,238 @@
-// Sectors tab
+/**
+ * Sectors UI — Enhanced with Wyckoff Phases, Mood & Rotation
+ * Compatible with both old and new message formats
+ */
+
 const UISectors = {
+    sectors: [],
+    mood: null,
+    rotation: null,
+    signals: null,
+    filter: 'all',
+
+    init() {
+        document.querySelectorAll('#sectorFilters .filter').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                document.querySelectorAll('#sectorFilters .filter').forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+                this.filter = e.target.dataset.sectorFilter;
+                this.renderList();
+            });
+        });
+    },
+
+    // Called by MessageHandler for SECTORS_DATA
     render(data) {
-        if (!data?.sectors) return;
-        let sectors = data.sectors;
-        
-        // Apply filters
-        if (State.currentSectorFilter === 'strongbuy') sectors = sectors.filter(s => s.recommendation === 'STRONG_BUY');
-        else if (State.currentSectorFilter === 'buy') sectors = sectors.filter(s => ['BUY', 'ACCUMULATE'].includes(s.recommendation));
-        else if (State.currentSectorFilter === 'gaining') sectors = sectors.filter(s => s.avgChange > 0);
-        else if (State.currentSectorFilter === 'losing') sectors = sectors.filter(s => s.avgChange < 0);
-        else if (State.currentSectorFilter === 'fipi') sectors = sectors.filter(s => Math.abs(s.fipiNet) > 0.05);
-        else if (State.currentSectorFilter === 'lowrisk') sectors = sectors.filter(s => s.riskLevel === 'LOW');
-        
+        if (!data) return;
+
+        // Handle both old format ({ sectors: [...] }) and new format ({ sectors, institutionalMood, ... })
+        if (Array.isArray(data)) {
+            this.sectors = data;
+        } else if (data.sectors) {
+            this.sectors = data.sectors;
+            this.mood = data.institutionalMood || null;
+            this.rotation = data.sectorRotation || null;
+            this.signals = data.signals || null;
+            this.renderMoodBar();
+        } else {
+            this.sectors = data;
+        }
+
+        this.renderList();
+    },
+
+    // Called by MessageHandler for SECTOR_STOCKS (old API)
+    renderSectorStocks(sectorName, stocks) {
         const list = document.getElementById('sectorsList');
         if (!list) return;
-        if (!sectors.length) {
+
+        if (!stocks || stocks.length === 0) {
+            list.innerHTML = `<div class="empty-state">No stocks found for ${sectorName}</div>`;
+            return;
+        }
+
+        let html = `<div style="padding:10px;background:var(--bg2);border-radius:10px;margin-bottom:10px;font-size:14px;font-weight:700">
+            📂 ${sectorName} — ${stocks.length} stocks
+            <button onclick="UISectors.renderList()" style="float:right;font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg3);color:var(--text);cursor:pointer">← Back</button>
+        </div>`;
+
+        html += stocks.map(s => this.renderStockMiniCard(s)).join('');
+        list.innerHTML = html;
+    },
+
+    renderStockMiniCard(stock) {
+        const color = stock.changePercent >= 0 ? 'var(--green)' : 'var(--red)';
+        const sign = stock.changePercent >= 0 ? '+' : '';
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px;margin-bottom:6px;border-radius:10px;background:var(--bg2);border:1px solid var(--border);cursor:pointer" onclick="App.openModal('${stock.symbol}')">
+            <div>
+                <div style="font-size:13px;font-weight:700">${stock.symbol}</div>
+                <div style="font-size:11px;color:var(--text2)">${stock.name || ''}</div>
+            </div>
+            <div style="text-align:right">
+                <div style="font-size:14px;font-weight:700">${stock.price.toFixed(2)}</div>
+                <div style="font-size:11px;color:${color}">${sign}${stock.changePercent.toFixed(2)}%</div>
+            </div>
+        </div>`;
+    },
+
+    renderMoodBar() {
+        const bar = document.getElementById('sectorsMoodBar');
+        if (!bar) return;
+
+        // Hide if no mood data
+        if (!this.mood) {
+            bar.style.display = 'none';
+            return;
+        }
+
+        const m = this.mood;
+
+        // Safety: ensure all required properties exist
+        const moodText = (m.mood || 'NEUTRAL').replace(/_/g, ' ');
+        const phase = m.phase || 'NEUTRAL';
+        const signal = m.signal || 'HOLD';
+        const actionText = (m.action || 'No action data').substring(0, 60);
+
+        const emoji = this.getMoodEmoji(m.mood || 'NEUTRAL');
+
+        bar.style.display = 'block';
+        bar.innerHTML = `${emoji} <strong>${moodText}</strong> — ${phase} — Signal: ${signal} — ${actionText}`;
+
+        // Color based on mood
+        const moodRaw = m.mood || 'NEUTRAL';
+        if (moodRaw.includes('BUY')) {
+            bar.style.background = 'color-mix(in srgb, var(--green) 12%, transparent)';
+            bar.style.color = 'var(--green)';
+            bar.style.border = '1px solid color-mix(in srgb, var(--green) 25%, transparent)';
+        } else if (moodRaw.includes('SELL')) {
+            bar.style.background = 'color-mix(in srgb, var(--red) 12%, transparent)';
+            bar.style.color = 'var(--red)';
+            bar.style.border = '1px solid color-mix(in srgb, var(--red) 25%, transparent)';
+        } else {
+            bar.style.background = 'var(--bg3)';
+            bar.style.color = 'var(--text2)';
+            bar.style.border = '1px solid var(--border)';
+        }
+    },
+
+    renderList() {
+        const list = document.getElementById('sectorsList');
+        if (!list) return;
+
+        let filtered = this.sectors || [];
+
+        switch(this.filter) {
+            case 'strongbuy':
+                filtered = filtered.filter(s => s.recommendation === 'STRONG_BUY');
+                break;
+            case 'buy':
+                filtered = filtered.filter(s => s.recommendation === 'BUY' || s.recommendation === 'ACCUMULATE');
+                break;
+            case 'gaining':
+                filtered = filtered.filter(s => (s.avgChange || 0) > 0);
+                break;
+            case 'losing':
+                filtered = filtered.filter(s => (s.avgChange || 0) < 0);
+                break;
+            case 'fipi':
+                filtered = filtered.filter(s => Math.abs(s.fipiNet || 0) > 0.1);
+                break;
+            case 'lowrisk':
+                filtered = filtered.filter(s => s.riskLevel === 'LOW');
+                break;
+            case 'accumulation':
+                filtered = filtered.filter(s => s.mood === 'ACCUMULATION');
+                break;
+            case 'markup':
+                filtered = filtered.filter(s => s.mood === 'MARKUP');
+                break;
+            case 'distribution':
+                filtered = filtered.filter(s => s.mood === 'DISTRIBUTION');
+                break;
+        }
+
+        if (filtered.length === 0) {
             list.innerHTML = '<div class="empty-state">No sectors match this filter</div>';
             return;
         }
-        
-        list.innerHTML = sectors.map(s => {
-            const scorePct = Math.min(100, Math.max(0, (s.compositeScore + 25) / 50 * 100));
-            const buySig = (s.signalCounts?.buy || 0) + (s.signalCounts?.strongBuy || 0);
-            const sellSig = (s.signalCounts?.sell || 0) + (s.signalCounts?.strongSell || 0);
-            
-            return `<div class="stock-card" style="border-left:4px solid ${s.recColor || '#94a3b8'}">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-                    <span style="font-weight:700;font-size:15px">🏭 ${s.name}</span>
-                    <span class="sector-rec-badge" style="background:${s.recColor || '#94a3b8'}22;color:${s.recColor || '#94a3b8'}">
-                        ${s.recEmoji || '➖'} ${s.recommendation?.replace(/_/g, ' ') || 'HOLD'}
-                    </span>
-                </div>
-                <div class="sector-score-bar">
-                    <div class="sector-score-fill" style="width:${scorePct}%;background:${s.recColor || '#94a3b8'}"></div>
-                </div>
-                <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text2);margin-bottom:6px">
-                    <span>Score: ${s.compositeScore > 0 ? '+' : ''}${s.compositeScore?.toFixed(1) || 0}</span>
-                    <span>Risk: ${s.riskLevel}</span>
-                </div>
-                <div class="sector-narrative">${s.narrative || ''}</div>
-                <div class="sector-metric-row">
-                    <span class="sector-metric" style="color:${s.trend === 'BULLISH' ? 'var(--green)' : s.trend === 'BEARISH' ? 'var(--red)' : 'var(--text2)'}">📈 ${s.trend}</span>
-                    <span class="sector-metric" style="color:${s.moneyFlow === 'INFLOW' ? 'var(--green)' : s.moneyFlow === 'OUTFLOW' ? 'var(--red)' : 'var(--text2)'}">💰 ${s.moneyFlow}</span>
-                    <span class="sector-metric" style="color:${s.smartMoney === 'ACCUMULATING' ? 'var(--green)' : s.smartMoney === 'DISTRIBUTING' ? 'var(--red)' : 'var(--text2)'}">🐋 ${s.smartMoney}</span>
-                    <span class="sector-metric">📊 RSI ${s.avgRSI?.toFixed(1) || '-'}</span>
-                    <span class="sector-metric" style="color:${s.avgChange >= 0 ? 'var(--green)' : 'var(--red)'}">📉 Avg ${s.avgChange >= 0 ? '+' : ''}${s.avgChange?.toFixed(2) || 0}%</span>
-                </div>
-                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;font-size:11px;margin-top:6px">
-                    <div style="background:var(--bg3);padding:6px;border-radius:6px;text-align:center">
-                        <div style="color:var(--text2)">🌍 FIPI</div>
-                        <div style="color:${s.fipiNet >= 0 ? 'var(--green)' : 'var(--red)'};font-weight:600">${s.fipiNet >= 0 ? '+' : ''}$${s.fipiNet?.toFixed(2) || 0}M</div>
-                    </div>
-                    <div style="background:var(--bg3);padding:6px;border-radius:6px;text-align:center">
-                        <div style="color:var(--text2)">🏠 Local</div>
-                        <div style="color:${s.localNet >= 0 ? 'var(--green)' : 'var(--red)'};font-weight:600">${s.localNet >= 0 ? '+' : ''}$${s.localNet?.toFixed(2) || 0}M</div>
-                    </div>
-                    <div style="background:var(--bg3);padding:6px;border-radius:6px;text-align:center">
-                        <div style="color:var(--text2)">🎯 Algo</div>
-                        <div style="font-weight:600">${buySig}B / ${sellSig}S</div>
-                    </div>
-                </div>
-                ${s.topStocks?.length ? `<div style="margin-top:8px">
-                    <div style="font-size:10px;color:var(--text2);margin-bottom:4px">🏆 Top Movers</div>
-                    <div class="sector-top-stocks">
-                        ${s.topStocks.map(st => `<span onclick="event.stopPropagation();App.openStock('${st.symbol}')">
-                            ${st.symbol} <span style="color:${st.change >= 0 ? 'var(--green)' : 'var(--red)'}">${st.change >= 0 ? '+' : ''}${st.change?.toFixed(1) || 0}%</span>
-                        </span>`).join('')}
-                    </div>
-                </div>` : ''}
-                <button class="tj-btn tj-btn-take" onclick="event.stopPropagation();UISectors.showStocks('${s.name}')" style="margin-top:8px;width:100%;font-size:12px;padding:8px">
-                    📊 View ${s.stockCount} Stocks in ${s.name}
-                </button>
-            </div>`;
-        }).join('');
+
+        list.innerHTML = filtered.map(s => this.renderSectorCard(s)).join('');
     },
 
-    showStocks(sectorName) {
-        WS.send({ type: 'GET_SECTOR_STOCKS', sector: sectorName });
-    },
+    renderSectorCard(s) {
+        const changeColor = (s.avgChange || 0) >= 0 ? 'var(--green)' : 'var(--red)';
+        const changeSign = (s.avgChange || 0) >= 0 ? '+' : '';
 
-    renderSectorStocks(sectorName, stocks) {
-        if (!stocks || !stocks.length) {
-            showToast();
-            return;
+        let phaseBadge = '';
+        if (s.mood && s.mood !== 'NEUTRAL') {
+            const phaseEmoji = { 'ACCUMULATION': '💎', 'MARKUP': '📈', 'DISTRIBUTION': '⚠️', 'MARKDOWN': '🔻' }[s.mood] || '';
+            phaseBadge = `<span class="phase-badge ${s.mood.toLowerCase()}">${phaseEmoji} ${s.mood}</span>`;
         }
-        
-        State.sectorFilterSymbols = stocks.map(s => s.symbol);
-        State.currentSectorName = sectorName;
-        State.currentFilter = 'sector';
-        
-        // Switch to market tab
-        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-        const mb = document.querySelector('[data-tab="market"]');
-        if (mb) mb.classList.add('active');
-        
-        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-        document.getElementById('marketTab').classList.add('active');
-        
-        document.querySelectorAll('#marketTab [data-filter]').forEach(b => b.classList.remove('active'));
-        
-        UIMarket.render();
-        showToast();
+
+        let rotationInd = '';
+        if (s.rotationSignal === 'ROTATE_IN') {
+            rotationInd = '<span style="font-size:10px;color:var(--green);margin-left:4px">🔄 IN</span>';
+        } else if (s.rotationSignal === 'ROTATE_OUT') {
+            rotationInd = '<span style="font-size:10px;color:var(--red);margin-left:4px">🔄 OUT</span>';
+        }
+
+        const fipiColor = (s.fipiNet || 0) >= 0 ? 'var(--green)' : 'var(--red)';
+        const fipiSign = (s.fipiNet || 0) >= 0 ? '+' : '';
+
+        const topStocks = (s.topStocks || []).slice(0, 3).map(st => {
+            const stColor = (st.change || 0) >= 0 ? 'var(--green)' : 'var(--red)';
+            const stSign = (st.change || 0) >= 0 ? '+' : '';
+            return `<span style="font-size:10px;color:${stColor}">${st.symbol} ${stSign}${(st.change || 0).toFixed(1)}%</span>`;
+        }).join(' · ');
+
+        let setupBadge = '';
+        if (s.bestSetup) {
+            const setupColor = s.bestSetup.action === 'STRONG_ENTRY' || s.bestSetup.action === 'ENTRY' ? 'var(--green)' : 
+                              s.bestSetup.action === 'EXIT' ? 'var(--red)' : 'var(--text2)';
+            setupBadge = `<div style="margin-top:6px;padding:4px 8px;border-radius:6px;background:color-mix(in srgb, ${setupColor} 8%, transparent);border:1px solid color-mix(in srgb, ${setupColor} 15%, transparent);font-size:11px;color:${setupColor}">
+                🎯 ${s.bestSetup.action.replace(/_/g, ' ')}: ${s.bestSetup.symbol} @ ${s.bestSetup.price} (${s.bestSetup.conviction}% conviction)
+            </div>`;
+        }
+
+        return `<div class="sector-card" style="padding:12px;margin-bottom:8px;border-radius:12px;background:var(--bg2);border:1px solid var(--border)">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
+                <div>
+                    <div style="font-size:14px;font-weight:700;color:var(--text)">${s.name}${phaseBadge}${rotationInd}</div>
+                    <div style="font-size:11px;color:var(--text2);margin-top:2px">${s.stockCount || 0} stocks · Avg RSI ${(s.avgRSI || 0).toFixed(1)}</div>
+                </div>
+                <div style="text-align:right">
+                    <div style="font-size:16px;font-weight:700;color:${changeColor}">${changeSign}${(s.avgChange || 0).toFixed(2)}%</div>
+                    <div style="font-size:10px;color:var(--text2)">${s.gainers || 0}↗ ${s.losers || 0}↘</div>
+                </div>
+            </div>
+
+            <div style="display:flex;gap:12px;margin-bottom:6px;font-size:11px">
+                <span style="color:${fipiColor};font-weight:600">🌍 FIPI: ${fipiSign}$${(s.fipiNet || 0).toFixed(2)}M</span>
+                <span style="color:var(--text2)">🏠 Local: ${(s.localNet || 0) >= 0 ? '+' : ''}$${(s.localNet || 0).toFixed(2)}M</span>
+                <span style="color:var(--text2)">Score: ${s.compositeScore || 0}</span>
+            </div>
+
+            <div style="font-size:10px;color:var(--text2);line-height:1.5">${s.narrative || ''}</div>
+
+            ${topStocks ? `<div style="margin-top:6px;font-size:10px;color:var(--text2)">Top: ${topStocks}</div>` : ''}
+            ${setupBadge}
+
+            ${s.moodNarrative ? `<div style="margin-top:8px;padding:8px;border-radius:8px;background:var(--bg3);font-size:11px;color:var(--text2);line-height:1.5;white-space:pre-line">${s.moodNarrative}</div>` : ''}
+        </div>`;
+    },
+
+    getMoodEmoji(mood) {
+        const map = {
+            'HEAVY_BUYING': '🚀🚀', 'BUYING': '🚀', 'LIGHT_BUYING': '👍',
+            'NEUTRAL': '➖', 'LIGHT_SELLING': '⚠️', 'SELLING': '🔻', 'HEAVY_SELLING': '🔻🔻'
+        };
+        return map[mood] || '➖';
     }
 };
+
+// Auto-init
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => UISectors.init());
+} else {
+    UISectors.init();
+}

@@ -1,24 +1,177 @@
 'use strict';
 
 const { getSectorForSymbol, getStocksForSector, getAllSectors } = require('./sectorMappingService');
+const moodService = require('./institutionalMoodService');
+const trendService = require('./smartMoneyTrendService');
+const rotationService = require('./sectorRotationService');
+
+/**
+ * ENHANCED SECTOR ANALYSIS SERVICE
+ * ================================
+ * Wires together FIPI/LIPI data, institutional mood, trend following,
+ * and sector rotation into a unified analysis output.
+ * 
+ * This is your MAIN orchestrator — call this and get everything.
+ */
 
 class SectorAnalysisService {
     constructor() {
         this.cache = null;
         this.lastUpdate = 0;
-        this.ttl = 60000; // 1 minute cache
+        this.ttl = 60000;
     }
 
-    analyze(stocks, fipiData, orderFlowTopStocks, instSignals, tradeSignals, newsSignal, announcements) {
+    /**
+     * MAIN METHOD: Full analysis pipeline
+     * 
+     * @param {Array} stocks - Array of stock objects with symbol, price, changePercent, volume, rsi
+     * @param {Object} fipiData - Output from fipiLipService.getFipiLipData()
+     * @param {Array} orderFlowTopStocks - Top order flow stocks
+     * @param {Object} instSignals - Institutional signals
+     * @param {Array} tradeSignals - Trading signals
+     * @param {Object} newsSignal - News sentiment
+     * @param {Object} announcements - Corporate announcements
+     * @param {Object} marketIndex - { changePercent } for KSE-100 or overall market
+     * @returns {Object} Complete analysis with mood, sectors, signals, rotation
+     */
+    analyze(stocks, fipiData, orderFlowTopStocks, instSignals, tradeSignals, newsSignal, announcements, marketIndex = null) {
         const now = Date.now();
         if (this.cache && (now - this.lastUpdate) < this.ttl) {
             return this.cache;
         }
+
+        // ─── STEP 1: Build base sector profiles ──────────────────────────────
         const sectors = this._buildProfiles(stocks, fipiData, orderFlowTopStocks, instSignals, tradeSignals, newsSignal, announcements);
-        this.cache = sectors;
+
+        // ─── STEP 2: Detect institutional mood ───────────────────────────────
+        const moodAnalysis = moodService.analyzeMood(fipiData, stocks, marketIndex);
+
+        // ─── STEP 3: Detect sector rotation ──────────────────────────────────
+        const rotationAnalysis = rotationService.detectRotation(
+            sectors.filter(s => s.stockCount > 0),
+            fipiData?.history || []
+        );
+
+        // ─── STEP 4: Generate trend-following signals ────────────────────────
+        const signalAnalysis = trendService.generateSignals(stocks, moodAnalysis, sectors);
+
+        // ─── STEP 5: Enhance sectors with mood/rotation context ──────────────
+        const enhancedSectors = sectors.map(sector => {
+            const sectorMood = moodAnalysis.sectorMoods?.find(m => m.name === sector.name);
+            const sectorRotation = rotationAnalysis.allSectors?.find(r => r.name === sector.name);
+            const sectorSignals = signalAnalysis.signals?.filter(s => s.sector === sector.name) || [];
+
+            return {
+                ...sector,
+
+                // Mood context
+                mood: sectorMood?.phase || 'NEUTRAL',
+                moodEmoji: sectorMood?.phaseEmoji || '➖',
+                sectorSignal: sectorMood?.signal || 'HOLD',
+
+                // Rotation context
+                flowChange: sectorRotation?.flowChange || 0,
+                sectorRank: sectorRotation?.rank || 0,
+                rotationSignal: sectorRotation ? (sectorRotation.flowChange > 0.5 ? 'ROTATE_IN' : sectorRotation.flowChange < -0.5 ? 'ROTATE_OUT' : 'HOLD') : 'HOLD',
+
+                // Signals for this sector
+                stockSignals: sectorSignals,
+                bestSetup: sectorSignals.length > 0 ? sectorSignals[0] : null,
+
+                // Enhanced narrative
+                moodNarrative: this._buildSectorMoodNarrative(sector, sectorMood, sectorRotation)
+            };
+        });
+
+        // ─── STEP 6: Build unified output ────────────────────────────────────
+        const result = {
+            timestamp: new Date().toISOString(),
+            date: fipiData?.date || new Date().toISOString().split('T')[0],
+
+            // ── INSTITUTIONAL MOOD (what user asked for) ─────────────────────
+            institutionalMood: {
+                current: moodAnalysis.mood,
+                phase: moodAnalysis.phase,
+                strength: moodAnalysis.strength,
+                confidence: moodAnalysis.confidence,
+                emoji: this._moodEmoji(moodAnalysis.mood),
+                narrative: moodAnalysis.narrative,
+                signal: moodAnalysis.signal,
+                action: moodAnalysis.action,
+                urgency: moodAnalysis.urgency,
+
+                // Key numbers
+                fipiNet: moodAnalysis.fipiNet,
+                localNet: moodAnalysis.localNet,
+                combinedNet: moodAnalysis.combinedNet,
+                acceleration: moodAnalysis.acceleration,
+
+                // Shifts (CRITICAL for trend following)
+                moodShift: moodAnalysis.moodShift,
+                previousMood: moodAnalysis.previousMood,
+
+                // Divergences (early warning)
+                divergences: moodAnalysis.divergences,
+
+                // History
+                moodHistory: moodService.getMoodHistory()
+            },
+
+            // ── SECTOR ROTATION ──────────────────────────────────────────────
+            sectorRotation: {
+                rotating: rotationAnalysis.rotating,
+                style: rotationAnalysis.rotationStyle,
+                narrative: rotationAnalysis.narrative,
+                hotSectors: rotationAnalysis.hotSectors,
+                coldSectors: rotationAnalysis.coldSectors,
+                improving: rotationAnalysis.improvingSectors,
+                deteriorating: rotationAnalysis.deterioratingSectors,
+                tradeIdeas: rotationAnalysis.tradeIdeas,
+                history: rotationService.getRotationHistory()
+            },
+
+            // ── SECTOR PROFILES ──────────────────────────────────────────────
+            sectors: enhancedSectors,
+
+            topSectors: enhancedSectors
+                .filter(s => s.stockCount > 0)
+                .slice(0, 10),
+
+            strongestAccumulation: enhancedSectors
+                .filter(s => s.mood === 'ACCUMULATION')
+                .sort((a, b) => b.fipiNet - a.fipiNet)
+                .slice(0, 3),
+
+            strongestMarkup: enhancedSectors
+                .filter(s => s.mood === 'MARKUP')
+                .sort((a, b) => b.fipiNet - a.fipiNet)
+                .slice(0, 3),
+
+            distributionWarning: enhancedSectors
+                .filter(s => s.mood === 'DISTRIBUTION')
+                .sort((a, b) => a.fipiNet - b.fipiNet)
+                .slice(0, 3),
+
+            // ── TREND-FOLLOWING SIGNALS ──────────────────────────────────────
+            signals: {
+                globalContext: signalAnalysis.globalContext,
+                allSignals: signalAnalysis.signals,
+                summary: signalAnalysis.summary,
+                positionGuidance: signalAnalysis.positionGuidance,
+                activePositions: trendService.getActivePositions(),
+                history: trendService.getSignalHistory()
+            },
+
+            // ── EXECUTIVE SUMMARY ────────────────────────────────────────────
+            executiveSummary: this._buildExecutiveSummary(moodAnalysis, rotationAnalysis, signalAnalysis, enhancedSectors)
+        };
+
+        this.cache = result;
         this.lastUpdate = now;
-        return sectors;
+        return result;
     }
+
+    // ─── BASE PROFILE BUILDING (from original, enhanced) ────────────────────
 
     _buildProfiles(stocks, fipiData, orderFlowTop, instSignals, tradeSignals, newsSignal, announcements) {
         const sectors = new Map();
@@ -42,7 +195,7 @@ class SectorAnalysisService {
         sectors.forEach(s => {
             if (s.stockCount > 0) {
                 s.avgChange = s.avgChange / s.stockCount;
-                s.avgRSI  = s.avgRSI  / s.stockCount;
+                s.avgRSI = s.avgRSI / s.stockCount;
             }
         });
 
@@ -110,8 +263,6 @@ class SectorAnalysisService {
                     if (ann.impact === 'STRONG_POSITIVE' || ann.impact === 'POSITIVE') s.catalystScore += 2;
                     else if (ann.impact === 'STRONG_NEGATIVE' || ann.impact === 'NEGATIVE') s.catalystScore -= 2;
                     if (ann.type === 'DIV' || ann.type === 'BON') s.catalystScore += 1;
-                    if (ann.details?.dividend > 5) s.catalystScore += 1;
-                    if (ann.details?.bonus > 10) s.catalystScore += 1;
                 }
             });
         }
@@ -157,7 +308,6 @@ class SectorAnalysisService {
     }
 
     _score(s) {
-        // Momentum (-5..+5)
         let mom = 0;
         if (s.avgChange > 2) mom = 5;
         else if (s.avgChange > 1) mom = 3;
@@ -170,17 +320,17 @@ class SectorAnalysisService {
         mom += Math.round(breadth * 3);
         mom = Math.max(-5, Math.min(5, mom));
 
-        // Flow (-5..+5)
         let flow = 0;
-        const totalFlow = s.fipiNet + s.localNet;
-        if (totalFlow > 2) flow = 5;
-        else if (totalFlow > 1) flow = 3;
-        else if (totalFlow > 0.3) flow = 1;
-        else if (totalFlow < -2) flow = -5;
-        else if (totalFlow < -1) flow = -3;
-        else if (totalFlow < -0.3) flow = -1;
+        if (s.fipiNet > 1.5) flow += 4;
+        else if (s.fipiNet > 0.5) flow += 2;
+        else if (s.fipiNet < -1.5) flow -= 4;
+        else if (s.fipiNet < -0.5) flow -= 2;
+        if (s.localNet > 1.5) flow += 2;
+        else if (s.localNet > 0.5) flow += 1;
+        else if (s.localNet < -1.5) flow -= 2;
+        else if (s.localNet < -0.5) flow -= 1;
+        flow = Math.max(-5, Math.min(5, flow));
 
-        // Smart Money (-5..+5)
         let smart = 0;
         const instBias = s.instBuys - s.instSells;
         if (instBias >= 3) smart = 5;
@@ -191,10 +341,8 @@ class SectorAnalysisService {
         else if (s.orderFlowNet < -100000) smart -= 2;
         smart = Math.max(-5, Math.min(5, smart));
 
-        // Catalyst (-5..+5)
         const cat = Math.max(-5, Math.min(5, s.catalystScore));
 
-        // Technical (-5..+5)
         let tech = 0;
         if (s.avgRSI > 70) tech = -3;
         else if (s.avgRSI > 60) tech = -1;
@@ -294,6 +442,103 @@ class SectorAnalysisService {
             .sort((a,b) => (b.changePercent||0) - (a.changePercent||0))
             .slice(0,5)
             .map(st => ({ symbol: st.symbol, price: st.price, change: st.changePercent, signal: st.signal, rsi: st.rsi }));
+    }
+
+    // ─── ENHANCED HELPERS ───────────────────────────────────────────────────
+
+    _buildSectorMoodNarrative(sector, sectorMood, sectorRotation) {
+        if (!sectorMood) return sector.narrative;
+
+        const parts = [sector.narrative];
+
+        if (sectorMood.phase === 'ACCUMULATION') {
+            parts.push(`\n💎 **Smart Money Signal:** ${sector.name} is in ACCUMULATION phase — FIPI buying into weakness. Potential bottom forming.`);
+        } else if (sectorMood.phase === 'MARKUP') {
+            parts.push(`\n📈 **Trend Following:** ${sector.name} in MARKUP — ride the wave. Trail stops below support.`);
+        } else if (sectorMood.phase === 'DISTRIBUTION') {
+            parts.push(`\n⚠️ **Warning:** ${sector.name} showing DISTRIBUTION — smart money selling to retail. Take profits.`);
+        } else if (sectorMood.phase === 'MARKDOWN') {
+            parts.push(`\n🔻 **Avoid:** ${sector.name} in MARKDOWN phase. Institutions dumping. Stay away.`);
+        }
+
+        if (sectorRotation) {
+            if (sectorRotation.flowChange > 1) {
+                parts.push(`🚀 Flow accelerating +$${sectorRotation.flowChange.toFixed(2)}M — institutions rotating IN.`);
+            } else if (sectorRotation.flowChange < -1) {
+                parts.push(`🔻 Flow deteriorating $${sectorRotation.flowChange.toFixed(2)}M — institutions rotating OUT.`);
+            }
+        }
+
+        return parts.join('\n');
+    }
+
+    _moodEmoji(mood) {
+        const map = {
+            'HEAVY_BUYING': '🚀🚀',
+            'BUYING': '🚀',
+            'LIGHT_BUYING': '👍',
+            'NEUTRAL': '➖',
+            'LIGHT_SELLING': '⚠️',
+            'SELLING': '🔻',
+            'HEAVY_SELLING': '🔻🔻'
+        };
+        return map[mood] || '➖';
+    }
+
+    _buildExecutiveSummary(mood, rotation, signals, sectors) {
+        const parts = [];
+
+        // Mood headline
+        parts.push(`## ${this._moodEmoji(mood.mood)} Institutional Mood: ${mood.mood.replace(/_/g, ' ')}`);
+        parts.push(`**Phase:** ${mood.phase} | **Strength:** ${mood.strength}/100 | **Signal:** ${mood.signal}`);
+        parts.push(`**Action:** ${mood.action}`);
+
+        // Key flow numbers
+        parts.push(`\n**Flows Today:** FIPI $${mood.fipiNet.toFixed(2)}M | Local $${mood.localNet.toFixed(2)}M | Combined $${(mood.fipiNet + mood.localNet).toFixed(2)}M`);
+
+        // Rotation
+        if (rotation.rotating) {
+            parts.push(`\n🔄 **Rotation Detected:** ${rotation.rotationStyle.description}`);
+            if (rotation.hotSectors.length > 0) {
+                parts.push(`**Rotate IN:** ${rotation.hotSectors.map(s => s.name).join(', ')}`);
+            }
+            if (rotation.coldSectors.length > 0) {
+                parts.push(`**Rotate OUT:** ${rotation.coldSectors.map(s => s.name).join(', ')}`);
+            }
+        }
+
+        // Signal summary
+        const sigSum = signals.summary;
+        parts.push(`\n📊 **Signals:** ${sigSum.entries} entries (${sigSum.strongEntries} strong), ${sigSum.exits} exits, ${sigSum.trims} trims`);
+
+        // Top opportunities
+        const topAccum = sectors.filter(s => s.mood === 'ACCUMULATION').slice(0, 2);
+        const topMarkup = sectors.filter(s => s.mood === 'MARKUP').slice(0, 2);
+
+        if (topAccum.length > 0) {
+            parts.push(`\n💎 **Accumulation Opportunities:** ${topAccum.map(s => s.name).join(', ')}`);
+        }
+        if (topMarkup.length > 0) {
+            parts.push(`📈 **Trending:** ${topMarkup.map(s => s.name).join(', ')}`);
+        }
+
+        // Warnings
+        const warnings = sectors.filter(s => s.mood === 'DISTRIBUTION').slice(0, 2);
+        if (warnings.length > 0) {
+            parts.push(`\n⚠️ **Distribution Warnings:** ${warnings.map(s => s.name).join(', ')}`);
+        }
+
+        // Divergences
+        if (mood.divergences && mood.divergences.length > 0) {
+            parts.push(`\n🔍 **Divergence Alert:** ${mood.divergences[0].message}`);
+        }
+
+        return parts.join('\n');
+    }
+
+    clearCache() {
+        this.cache = null;
+        this.lastUpdate = 0;
     }
 }
 

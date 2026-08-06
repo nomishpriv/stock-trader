@@ -12,6 +12,9 @@
     <link rel="stylesheet" href="/css/main.css">
     <link rel="stylesheet" href="/css/components.css">
     <link rel="stylesheet" href="/css/tabs.css">
+    <!-- NEW: Mood dashboard styles -->
+    <link rel="stylesheet" href="/css/mood-dashboard.css">
+<base target="_blank">
 </head>
 <body>
     <!-- Login Screen -->
@@ -37,14 +40,15 @@
                 <span id="statusText" style="font-size:12px">Connecting...</span>
             </div>
         </header>
-        
+
         <div class="market-bar">
             <span id="kseValue">KSE100: ---</span>
             <span id="kseChange">0.00%</span>
             <span id="marketVol">Vol: ---</span>
-            <span id="marketSignal">AI: ---</span>
+            <!-- NEW: Live mood indicator in market bar -->
+            <span id="marketMood" style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px;background:var(--bg3)">➖ --</span>
         </div>
-        
+
         <nav class="bottom-nav">
             <button class="nav-btn active" data-tab="market"><span>📊</span><span class="nav-label">Market</span></button>
             <button class="nav-btn" data-tab="watchlist"><span>⭐</span><span class="nav-label">Watch</span></button>
@@ -61,7 +65,7 @@
             <button class="nav-btn" data-tab="fipilipi"><span>💹</span><span class="nav-label">FIPI/LIPI</span></button>
             <button class="nav-btn" data-tab="search"><span>🔍</span><span class="nav-label">Search</span></button>
         </nav>
-        
+
         <div class="content">
             <!-- Market Tab -->
             <div id="marketTab" class="tab active">
@@ -73,13 +77,13 @@
                 </div>
                 <div id="marketList" class="stock-list"></div>
             </div>
-            
+
             <!-- Watchlist Tab -->
             <div id="watchlistTab" class="tab">
                 <div id="watchlistEmpty" class="empty-state"><p>⭐ No stocks yet</p></div>
                 <div id="watchlistList" class="stock-list"></div>
             </div>
-            
+
             <!-- Signals Tab -->
             <div id="signalsTab" class="tab">
                 <div class="filter-bar">
@@ -90,7 +94,7 @@
                 </div>
                 <div id="signalsList" class="stock-list"></div>
             </div>
-            
+
             <!-- PreMarket Tab -->
             <div id="premarketTab" class="tab">
                 <div id="premarketHeader" class="pm-header-dynamic" style="background:var(--bg2)">🔮 Pre-Market Scanner</div>
@@ -106,7 +110,7 @@
                 </div>
                 <div id="premarketAnalysisResults" class="stock-list"></div>
             </div>
-            
+
             <!-- Order Flow Tab -->
             <div id="orderflowTab" class="tab">
                 <div style="text-align:center;margin-bottom:12px">
@@ -124,7 +128,7 @@
                 <div class="of-hourly"><h4>🕐 Hourly Buy/Sell Flow</h4><div id="ofHourlyChart" class="of-hourly-bar"></div></div>
                 <div class="of-large-trades"><h4>🐋 Recent Large Trades</h4><div id="ofLargeTrades"></div></div>
             </div>
-            
+
             <!-- Trade Journal Tab -->
             <div id="tradejournalTab" class="tab">
                 <div class="tj-summary-grid" id="tjSummary">
@@ -140,7 +144,7 @@
                 <h4 style="font-size:13px;margin:12px 0 6px">📕 Recent Closed</h4>
                 <div id="tjClosedTrades"><div class="empty-state">No closed trades yet</div></div>
             </div>
-            
+
             <!-- Institutional Tracker Tab -->
             <div id="institutionalTab" class="tab">
                 <button id="analyzeInstBtn" class="inst-analyze-btn" onclick="UIInstitutional.analyze()">🐋 Scan for Institutional Activity</button>
@@ -154,7 +158,7 @@
                     <div class="empty-state">No alerts yet</div>
                 </div>
             </div>
-            
+
             <!-- News Tab -->
             <div id="newsTab" class="tab">
                 <div id="newsSignalHero" class="news-signal-hero">
@@ -171,13 +175,13 @@
                     </div>
                 </div>
             </div>
-            
+
             <!-- Announcements Tab -->
             <div id="announcementsTab" class="tab">
                 <div id="annSummary" class="ann-summary-bar"></div>
                 <div id="annHighImpact" class="stock-list"></div>
             </div>
-            
+
             <!-- Index Tracker Tab -->
             <div id="indextrackerTab" class="tab">
                 <button id="refreshIndexBtn" class="idx-refresh-btn" onclick="WS.send({type:'GET_INDEX_TRACKER'})">🔄 Refresh Index Data</button>
@@ -219,7 +223,7 @@
                     </table>
                 </div>
             </div>
-            
+
             <!-- Global Indices Tab -->
             <div id="globalindicesTab" class="tab">
                 <div style="text-align:center;margin-bottom:10px">
@@ -244,12 +248,14 @@
                     📊 Compare with <b>KSE-100</b>: <span id="giKseCompare" style="font-weight:600">--</span>
                 </div>
             </div>
-            
+
             <!-- Sectors Tab -->
             <div id="sectorsTab" class="tab">
                 <div id="sectorsHeader" style="text-align:center;padding:10px;background:var(--bg2);border-radius:10px;margin-bottom:10px">
                     <span style="font-size:18px">🏭 Sector Analysis</span>
                 </div>
+                <!-- NEW: Mood summary bar in sectors tab -->
+                <div id="sectorsMoodBar" style="display:none;padding:10px;border-radius:10px;margin-bottom:10px;text-align:center;font-size:12px;font-weight:600"></div>
                 <div class="filter-bar" id="sectorFilters">
                     <button class="filter active" data-sector-filter="all">All Sectors</button>
                     <button class="filter" data-sector-filter="strongbuy">🚀 Strong Buy</button>
@@ -258,29 +264,122 @@
                     <button class="filter" data-sector-filter="losing">📉 Losing</button>
                     <button class="filter" data-sector-filter="fipi">🌍 FIPI Active</button>
                     <button class="filter" data-sector-filter="lowrisk">🛡️ Low Risk</button>
+                    <!-- NEW: Phase filters -->
+                    <button class="filter" data-sector-filter="accumulation">💎 Accumulation</button>
+                    <button class="filter" data-sector-filter="markup">📈 Markup</button>
+                    <button class="filter" data-sector-filter="distribution">⚠️ Distribution</button>
                 </div>
                 <div id="sectorsList" class="stock-list"></div>
             </div>
-            
-            <!-- FIPI/LIPI Tab -->
+
+            <!-- ═══ NEW: Enhanced FIPI/LIPI Tab with Mood Dashboard ═══ -->
             <div id="fipilipiTab" class="tab">
-                <button id="refreshFipiBtn" class="idx-refresh-btn" onclick="WS.send({type:'GET_FIPILIPI'});WS.send({type:'GET_SECTORS'})" style="background:var(--purple)">🔄 Refresh FIPI/LIPI Data</button>
-                <div id="fipiSummary" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
-                    <div style="background:var(--bg2);padding:12px;border-radius:10px;text-align:center">
-                        <div style="font-size:10px;color:var(--text2)">🌍 FIPI Net</div>
-                        <div id="fipiNetVal" style="font-size:20px;font-weight:700">--</div>
+                <button id="refreshFipiBtn" class="idx-refresh-btn" onclick="UIFipiLipi.refresh()" style="background:var(--purple);margin-bottom:10px">🔄 Refresh FIPI/LIPI & Mood</button>
+
+                <!-- MOOD DASHBOARD -->
+                <div id="moodDashboard" class="mood-dashboard">
+                    <div class="mood-header">
+                        <div>
+                            <div class="mood-label">INSTITUTIONAL MOOD</div>
+                            <div class="mood-title">Smart Money Dashboard</div>
+                        </div>
+                        <div id="moodBadge" class="mood-badge">➖ NEUTRAL</div>
                     </div>
-                    <div style="background:var(--bg2);padding:12px;border-radius:10px;text-align:center">
-                        <div style="font-size:10px;color:var(--text2)">🏠 Local Net</div>
-                        <div id="lipiNetVal" style="font-size:20px;font-weight:700">--</div>
+
+                    <!-- Phase Indicator -->
+                    <div class="phase-section">
+                        <div class="phase-label">MARKET PHASE</div>
+                        <div class="phase-row">
+                            <div class="phase-box" data-phase="ACCUMULATION">
+                                <div class="phase-emoji">💎</div>
+                                <div class="phase-name">ACCUM</div>
+                            </div>
+                            <div class="phase-box active" data-phase="MARKUP">
+                                <div class="phase-emoji">📈</div>
+                                <div class="phase-name">MARKUP</div>
+                            </div>
+                            <div class="phase-box" data-phase="DISTRIBUTION">
+                                <div class="phase-emoji">⚠️</div>
+                                <div class="phase-name">DIST</div>
+                            </div>
+                            <div class="phase-box" data-phase="MARKDOWN">
+                                <div class="phase-emoji">🔻</div>
+                                <div class="phase-name">DOWN</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Flow Bars -->
+                    <div class="flow-section">
+                        <div class="flow-row">
+                            <span class="flow-label">🌍 FIPI NET FLOW</span>
+                            <span id="fipiNetValue" class="flow-value">--</span>
+                        </div>
+                        <div class="flow-bar-bg"><div id="fipiNetBar" class="flow-bar" style="width:0%"></div></div>
+
+                        <div class="flow-row">
+                            <span class="flow-label">🏠 LOCAL NET FLOW</span>
+                            <span id="localNetValue" class="flow-value">--</span>
+                        </div>
+                        <div class="flow-bar-bg"><div id="localNetBar" class="flow-bar local" style="width:0%"></div></div>
+                    </div>
+
+                    <!-- Mood Shift Alert -->
+                    <div id="moodShiftAlert" class="mood-shift-alert" style="display:none">
+                        <div class="shift-icon">🔄</div>
+                        <div class="shift-text">
+                            <div class="shift-title">Mood Shift Detected</div>
+                            <div id="shiftDetail" class="shift-detail">--</div>
+                        </div>
+                    </div>
+
+                    <!-- Divergences -->
+                    <div id="divergencesSection" style="display:none">
+                        <div class="section-label">🔍 DIVERGENCE ALERTS</div>
+                        <div id="divergencesList"></div>
+                    </div>
+
+                    <!-- Action Panel -->
+                    <div id="actionPanel" class="action-panel">
+                        <div class="action-header">
+                            <span class="action-icon">🎯</span>
+                            <span class="action-title">TREND-FOLLOWING SIGNAL</span>
+                        </div>
+                        <div id="actionText" class="action-text">Loading...</div>
+                        <div class="action-meta">
+                            <span>Conviction: <strong id="actionConviction">--</strong></span>
+                            <span>Urgency: <strong id="actionUrgency">--</strong></span>
+                        </div>
                     </div>
                 </div>
-                <h4 style="font-size:13px;margin-bottom:6px">📊 Investor Type Breakdown</h4>
-                <div id="fipiDetails"></div>
-                <h4 style="font-size:13px;margin:12px 0 6px">🏭 Sector-wise FIPI Flow</h4>
-                <div id="fipiSectors"></div>
+
+                <!-- SECTOR ROTATION -->
+                <div id="rotationSection" style="margin-top:16px">
+                    <div class="section-label">🔄 SECTOR ROTATION</div>
+                    <div id="rotationStyle" class="rotation-style" style="display:none">--</div>
+                    <div class="rotation-grid">
+                        <div class="rotation-col hot">
+                            <div class="rotation-col-title">🔥 Hot — Money IN</div>
+                            <div id="hotSectors"></div>
+                        </div>
+                        <div class="rotation-col cold">
+                            <div class="rotation-col-title">❄️ Cold — Money OUT</div>
+                            <div id="coldSectors"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Raw FIPI/LIPI Data -->
+                <div style="margin-top:16px">
+                    <div class="section-label">📊 INVESTOR TYPE BREAKDOWN</div>
+                    <div id="fipiDetails"></div>
+                </div>
+                <div style="margin-top:12px">
+                    <div class="section-label">🏭 SECTOR-WISE FIPI FLOW</div>
+                    <div id="fipiSectors"></div>
+                </div>
             </div>
-            
+
             <!-- Search Tab -->
             <div id="searchTab" class="tab">
                 <div class="search-box">
@@ -348,7 +447,7 @@
             </div>
         </div>
     </div>
-    
+
     <div id="toast" class="toast">Updated</div>
 
     <!-- JavaScript Files - Load in order -->
@@ -356,7 +455,7 @@
     <script src="/js/utils.js"></script>
     <script src="/js/state.js"></script>
     <script src="/js/websocket.js"></script>
-    
+
     <!-- UI Modules -->
     <script src="/js/ui/common.js"></script>
     <script src="/js/ui/market.js"></script>
@@ -372,10 +471,11 @@
     <script src="/js/ui/indexTracker.js"></script>
     <script src="/js/ui/globalIndices.js"></script>
     <script src="/js/ui/sectors.js"></script>
+    <!-- NEW: Enhanced FIPI/LIPI UI with Mood -->
     <script src="/js/ui/fipilipi.js"></script>
     <script src="/js/ui/tradeJournal.js"></script>
     <script src="/js/ui/search.js"></script>
-    
+
     <!-- Core -->
     <script src="/js/messageHandler.js"></script>
     <script src="/js/app.js"></script>

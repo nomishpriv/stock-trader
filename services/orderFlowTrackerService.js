@@ -143,7 +143,7 @@ class OrderFlowTrackerService {
                 else if (price < lastPrice) { side = 'SELL'; confidence = 55; method = 'DOWNTICK_ONLY'; }
                 else { side = 'BUY'; confidence = 50; method = 'FLAT'; }
             } else {
-                side = 'BUY'; confidence = 50; method = 'DEFAULT';
+                return null; // insufficient data — don't guess a direction
             }
         }
 
@@ -439,6 +439,18 @@ class OrderFlowTrackerService {
 
     getLargeTrades(limit = 20) {
         return this.data.largeTrades.slice(-limit).reverse();
+    }
+
+    /**
+     * ✅ NEW: symbol → buyRatio lookup for confluence scoring
+     */
+    getAllBuyRatios() {
+        const result = {};
+        for (const [symbol, stock] of Object.entries(this.data.stocks)) {
+            const total = stock.buyVolume + stock.sellVolume;
+            result[symbol] = total > 0 ? +((stock.buyVolume / total) * 100).toFixed(1) : 50;
+        }
+        return result;
     }
 }
 

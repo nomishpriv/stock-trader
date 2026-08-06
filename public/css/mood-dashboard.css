@@ -1,0 +1,465 @@
+/* ═══════════════════════════════════════════════════════════════
+   MOOD DASHBOARD STYLES
+   Smart Money Analysis — FIPI/LIPI Tab
+   ═══════════════════════════════════════════════════════════════ */
+
+.mood-dashboard {
+    padding: 0 4px;
+}
+
+/* Header */
+.mood-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+}
+
+.mood-label {
+    font-size: 11px;
+    color: var(--kimi-color-text-tertiary);
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
+.mood-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--kimi-color-text-primary);
+    margin-top: 2px;
+}
+
+.mood-badge {
+    padding: 5px 12px;
+    border-radius: 18px;
+    font-size: 12px;
+    font-weight: 700;
+    background: color-mix(in srgb, var(--kimi-color-text-quaternary) 15%, transparent);
+    color: var(--kimi-color-text-secondary);
+    border: 1px solid var(--kimi-color-border);
+    transition: all 0.3s ease;
+}
+
+.mood-badge.buying {
+    background: color-mix(in srgb, var(--kimi-color-positive) 15%, transparent);
+    color: var(--kimi-color-positive);
+    border-color: color-mix(in srgb, var(--kimi-color-positive) 25%, transparent);
+}
+
+.mood-badge.selling {
+    background: color-mix(in srgb, var(--kimi-color-danger) 15%, transparent);
+    color: var(--kimi-color-danger);
+    border-color: color-mix(in srgb, var(--kimi-color-danger) 25%, transparent);
+}
+
+/* Phase Section */
+.phase-section {
+    margin-bottom: 16px;
+}
+
+.phase-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--kimi-color-text-tertiary);
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.phase-label::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--kimi-color-text-quaternary);
+    animation: moodPulse 2s infinite;
+}
+
+@keyframes moodPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
+.phase-row {
+    display: flex;
+    gap: 5px;
+}
+
+.phase-box {
+    flex: 1;
+    padding: 8px 4px;
+    border-radius: 8px;
+    text-align: center;
+    border: 1px solid var(--kimi-color-border);
+    background: transparent;
+    opacity: 0.4;
+    transition: all 0.3s ease;
+}
+
+.phase-box.active {
+    opacity: 1;
+    border-width: 2px;
+}
+
+.phase-box.active.accumulation {
+    border-color: var(--kimi-color-positive);
+    background: color-mix(in srgb, var(--kimi-color-positive) 8%, transparent);
+}
+
+.phase-box.active.markup {
+    border-color: var(--kimi-color-positive);
+    background: color-mix(in srgb, var(--kimi-color-positive) 8%, transparent);
+}
+
+.phase-box.active.distribution {
+    border-color: var(--kimi-color-warning);
+    background: color-mix(in srgb, var(--kimi-color-warning) 8%, transparent);
+}
+
+.phase-box.active.markdown {
+    border-color: var(--kimi-color-danger);
+    background: color-mix(in srgb, var(--kimi-color-danger) 8%, transparent);
+}
+
+.phase-emoji {
+    font-size: 16px;
+    margin-bottom: 2px;
+}
+
+.phase-name {
+    font-size: 9px;
+    font-weight: 600;
+    color: var(--kimi-color-text-secondary);
+    letter-spacing: 0.3px;
+}
+
+.phase-box.active .phase-name {
+    font-weight: 700;
+}
+
+.phase-box.active.accumulation .phase-name,
+.phase-box.active.markup .phase-name {
+    color: var(--kimi-color-positive);
+}
+
+.phase-box.active.distribution .phase-name {
+    color: var(--kimi-color-warning);
+}
+
+.phase-box.active.markdown .phase-name {
+    color: var(--kimi-color-danger);
+}
+
+/* Flow Section */
+.flow-section {
+    margin-bottom: 16px;
+}
+
+.flow-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.flow-label {
+    font-size: 11px;
+    color: var(--kimi-color-text-tertiary);
+    font-weight: 600;
+}
+
+.flow-value {
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.flow-bar-bg {
+    height: 7px;
+    border-radius: 4px;
+    background: var(--kimi-color-border);
+    overflow: hidden;
+    margin-bottom: 10px;
+}
+
+.flow-bar {
+    height: 100%;
+    border-radius: 4px;
+    background: var(--kimi-color-positive);
+    transition: width 0.6s ease, background 0.3s ease;
+    min-width: 2px;
+}
+
+.flow-bar.negative {
+    background: var(--kimi-color-danger);
+}
+
+.flow-bar.local {
+    background: color-mix(in srgb, var(--kimi-color-positive) 60%, var(--kimi-color-text-quaternary));
+}
+
+.flow-bar.local.negative {
+    background: color-mix(in srgb, var(--kimi-color-danger) 60%, var(--kimi-color-text-quaternary));
+}
+
+/* Mood Shift Alert */
+.mood-shift-alert {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--kimi-color-accent) 8%, transparent);
+    border: 1px solid color-mix(in srgb, var(--kimi-color-accent) 18%, transparent);
+    margin-bottom: 14px;
+    animation: shiftSlide 0.5s ease;
+}
+
+@keyframes shiftSlide {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.shift-icon {
+    font-size: 20px;
+}
+
+.shift-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--kimi-color-text-primary);
+}
+
+.shift-detail {
+    font-size: 11px;
+    color: var(--kimi-color-text-secondary);
+    margin-top: 1px;
+}
+
+/* Section Labels */
+.section-label {
+    font-size: 11px;
+    color: var(--kimi-color-text-tertiary);
+    font-weight: 600;
+    margin-bottom: 8px;
+    letter-spacing: 0.3px;
+}
+
+/* Divergences */
+.divergence-item {
+    padding: 8px 10px;
+    border-radius: 8px;
+    margin-bottom: 6px;
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+.divergence-item.bullish {
+    background: color-mix(in srgb, var(--kimi-color-positive) 8%, transparent);
+    border: 1px solid color-mix(in srgb, var(--kimi-color-positive) 15%, transparent);
+    color: var(--kimi-color-positive);
+}
+
+.divergence-item.bearish {
+    background: color-mix(in srgb, var(--kimi-color-danger) 8%, transparent);
+    border: 1px solid color-mix(in srgb, var(--kimi-color-danger) 15%, transparent);
+    color: var(--kimi-color-danger);
+}
+
+/* Action Panel */
+.action-panel {
+    padding: 12px;
+    border-radius: 12px;
+    border: 1px solid var(--kimi-color-border);
+    background: color-mix(in srgb, var(--kimi-color-positive) 3%, transparent);
+    transition: all 0.3s ease;
+}
+
+.action-panel.sell {
+    background: color-mix(in srgb, var(--kimi-color-danger) 3%, transparent);
+}
+
+.action-panel.neutral {
+    background: color-mix(in srgb, var(--kimi-color-text-quaternary) 3%, transparent);
+}
+
+.action-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+.action-icon {
+    font-size: 14px;
+}
+
+.action-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--kimi-color-text-primary);
+}
+
+.action-text {
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--kimi-color-text-secondary);
+}
+
+.action-text strong {
+    color: var(--kimi-color-positive);
+}
+
+.action-panel.sell .action-text strong {
+    color: var(--kimi-color-danger);
+}
+
+.action-meta {
+    display: flex;
+    gap: 14px;
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--kimi-color-text-tertiary);
+}
+
+.action-meta strong {
+    color: var(--kimi-color-text-primary);
+}
+
+/* Rotation Section */
+.rotation-style {
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 10px;
+    text-align: center;
+}
+
+.rotation-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.rotation-col {
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid var(--kimi-color-border);
+}
+
+.rotation-col.hot {
+    background: color-mix(in srgb, var(--kimi-color-positive) 5%, transparent);
+    border-color: color-mix(in srgb, var(--kimi-color-positive) 18%, var(--kimi-color-border));
+}
+
+.rotation-col.cold {
+    background: color-mix(in srgb, var(--kimi-color-danger) 5%, transparent);
+    border-color: color-mix(in srgb, var(--kimi-color-danger) 18%, var(--kimi-color-border));
+}
+
+.rotation-col-title {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    margin-bottom: 8px;
+}
+
+.rotation-col.hot .rotation-col-title {
+    color: var(--kimi-color-positive);
+}
+
+.rotation-col.cold .rotation-col-title {
+    color: var(--kimi-color-danger);
+}
+
+.rotation-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+    font-size: 12px;
+    border-bottom: 1px solid var(--kimi-color-border);
+}
+
+.rotation-item:last-child {
+    border-bottom: none;
+}
+
+.rotation-item-name {
+    color: var(--kimi-color-text-primary);
+    font-weight: 500;
+}
+
+.rotation-item-value {
+    font-weight: 700;
+    font-size: 11px;
+}
+
+.rotation-col.hot .rotation-item-value {
+    color: var(--kimi-color-positive);
+}
+
+.rotation-col.cold .rotation-item-value {
+    color: var(--kimi-color-danger);
+}
+
+/* Market bar mood indicator */
+#marketMood {
+    transition: all 0.3s ease;
+}
+
+#marketMood.buying {
+    background: color-mix(in srgb, var(--kimi-color-positive) 20%, transparent) !important;
+    color: var(--kimi-color-positive);
+}
+
+#marketMood.selling {
+    background: color-mix(in srgb, var(--kimi-color-danger) 20%, transparent) !important;
+    color: var(--kimi-color-danger);
+}
+
+/* Sectors mood bar */
+#sectorsMoodBar {
+    transition: all 0.3s ease;
+}
+
+/* Phase badges for sector cards */
+.phase-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 700;
+    margin-left: 6px;
+}
+
+.phase-badge.accumulation {
+    background: color-mix(in srgb, var(--kimi-color-positive) 15%, transparent);
+    color: var(--kimi-color-positive);
+}
+
+.phase-badge.markup {
+    background: color-mix(in srgb, var(--kimi-color-positive) 15%, transparent);
+    color: var(--kimi-color-positive);
+}
+
+.phase-badge.distribution {
+    background: color-mix(in srgb, var(--kimi-color-warning) 15%, transparent);
+    color: var(--kimi-color-warning);
+}
+
+.phase-badge.markdown {
+    background: color-mix(in srgb, var(--kimi-color-danger) 15%, transparent);
+    color: var(--kimi-color-danger);
+}
+
+/* Empty states */
+.empty-state {
+    text-align: center;
+    padding: 30px 20px;
+    color: var(--kimi-color-text-tertiary);
+    font-size: 13px;
+}

@@ -318,6 +318,18 @@ class InstitutionalTrackerService {
     }
 
     /**
+     * ✅ NEW: Lightweight full lookup (no threshold) for confluence scoring
+     * Unlike getActiveSignals(), returns every tracked symbol regardless of strength.
+     */
+    getAllSignals() {
+        const result = {};
+        for (const [symbol, stock] of Object.entries(this.data.stocks)) {
+            result[symbol] = { signal: stock.currentSignal, score: stock.signalStrength };
+        }
+        return result;
+    }
+
+    /**
      * Get stock-specific history
      */
     getStockHistory(symbol) {

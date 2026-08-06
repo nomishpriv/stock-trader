@@ -34,12 +34,14 @@ const tradeJournal = require('./services/tradeJournalService');
 // Import global indices service
 const globalIndicesService = require('./services/globalIndicesService');
 
-
-// Import FIPI/LIPI service
+// ─── NEW: Smart Money Services ───────────────────────────────────────────
 const { getFipiLipData, getWeeklyTrend } = require('./services/fipiLipService');
+const institutionalMoodService = require('./services/institutionalMoodService');
+const smartMoneyTrendService = require('./services/smartMoneyTrendService');
+const sectorRotationService = require('./services/sectorRotationService');
+// ─────────────────────────────────────────────────────────────────────────
 
 const { getSectorForSymbol, getStocksForSector, getAllSectors } = require('./services/sectorMappingService');
-
 const sectorAnalysisService = require('./services/sectorAnalysisService');
 
 
@@ -66,7 +68,6 @@ const INSTITUTIONAL_INTERVAL = 45000;
 // ============ FETCH MARKET DATA ============
 async function fetchMarketData() { try { const { data } = await api.get('/market'); return data; } catch (e) { throw e; } }
 
-// In server.js, update fetchAllStocks to filter illiquid stocks:
 async function fetchAllStocks() {
   try {
     const data = await fetchMarketData();
@@ -76,7 +77,6 @@ async function fetchAllStocks() {
     const stocks = Object.entries(raw)
       .filter(([sym, s]) => {
         if (!s.c || +s.c <= 0) return false;
-        // Filter very low priced penny stocks (optional - adjust threshold)
         if (+s.c < 2 && +s.v < 10000) return false;
         if (s.nm) { 
           const name = s.nm.toLowerCase(); 
@@ -89,7 +89,6 @@ async function fetchAllStocks() {
         if (s.st === 2) return false;
         if (!s.sh || +s.sh === 0) return false;
         if (!s.nm || s.nm.trim() === '') return false;
-        // Filter stocks with zero volume
         if (!s.v || +s.v === 0) return false;
         return true;
       })
@@ -147,163 +146,60 @@ function detectOrderBookTraps(parsedBook, stockData) {
     const lowerCircuit = stockData?.lowerCircuit || 0;
     const dayVolume = stockData?.volume || 0;
 
-    // ─── 1. LIQUIDITY ANALYSIS ───
-    if (spreadPercent > 2.0) {
-        isLowLiquidity = true;
-        warnings.push(`⚠️ Very wide spread ${spreadPercent.toFixed(2)}% — illiquid`);
-        confidence -= 25;
-    } else if (spreadPercent > 1.0) {
-        isLowLiquidity = true;
-        warnings.push(`⚠️ Wide spread ${spreadPercent.toFixed(2)}% — low liquidity`);
-        confidence -= 15;
-    } else if (spreadPercent > 0.5) {
-        warnings.push(`⚠️ Elevated spread ${spreadPercent.toFixed(2)}%`);
-        confidence -= 5;
-    }
+    if (spreadPercent > 2.0) { isLowLiquidity = true; warnings.push(`⚠️ Very wide spread ${spreadPercent.toFixed(2)}% — illiquid`); confidence -= 25; }
+    else if (spreadPercent > 1.0) { isLowLiquidity = true; warnings.push(`⚠️ Wide spread ${spreadPercent.toFixed(2)}% — low liquidity`); confidence -= 15; }
+    else if (spreadPercent > 0.5) { warnings.push(`⚠️ Elevated spread ${spreadPercent.toFixed(2)}%`); confidence -= 5; }
 
-    if (bids.length < 3 || asks.length < 3) {
-        isLowLiquidity = true;
-        warnings.push('📉 Shallow order book (< 3 levels)');
-        confidence -= 15;
-    }
+    if (bids.length < 3 || asks.length < 3) { isLowLiquidity = true; warnings.push('📉 Shallow order book (< 3 levels)'); confidence -= 15; }
+    if (dayVolume < 30000 && spreadPercent > 0.4) { isLowLiquidity = true; warnings.push('💤 Thinly traded — use limit orders only'); confidence -= 10; }
 
-    if (dayVolume < 30000 && spreadPercent > 0.4) {
-        isLowLiquidity = true;
-        warnings.push('💤 Thinly traded — use limit orders only');
-        confidence -= 10;
-    }
-
-    // ─── 2. FAKE WALL DETECTION ───
     const topBidVol = bids[0]?.volume || 0;
     const topAskVol = asks[0]?.volume || 0;
     const topBidConcentration = (topBidVol / totalBidVol) * 100;
     const topAskConcentration = (topAskVol / totalAskVol) * 100;
-
-    // Depth drop-off: top level vs next 2 levels combined
     const next2BidVol = bids.slice(1, 3).reduce((s, b) => s + (b?.volume || 0), 0);
     const next2AskVol = asks.slice(1, 3).reduce((s, a) => s + (a?.volume || 0), 0);
     const bidDropoff = next2BidVol > 0 ? topBidVol / next2BidVol : 999;
     const askDropoff = next2AskVol > 0 ? topAskVol / next2AskVol : 999;
 
-    // Round-number clustering check
-    const isRoundPrice = (p) => {
-        if (!p) return false;
-        const dec = Math.round((p % 1) * 100) / 100;
-        return dec === 0 || dec === 0.5 || dec === 0.25 || dec === 0.75 || dec === 0.2 || dec === 0.8;
-    };
+    const isRoundPrice = (p) => { if (!p) return false; const dec = Math.round((p % 1) * 100) / 100; return dec === 0 || dec === 0.5 || dec === 0.25 || dec === 0.75 || dec === 0.2 || dec === 0.8; };
 
-    // Fake BID wall: one level dominates with no depth behind
-    if (topBidConcentration > 60 && bidDropoff > 8) {
-        isFakeWall = true;
-        warnings.push(`🧱 Fake bid wall @ ${bids[0]?.price?.toFixed(2)} — ${_formatVol(topBidVol)} (${topBidConcentration.toFixed(0)}% of all bids)`);
-        confidence -= 20;
-    }
+    if (topBidConcentration > 60 && bidDropoff > 8) { isFakeWall = true; warnings.push(`🧱 Fake bid wall @ ${bids[0]?.price?.toFixed(2)} — ${_formatVol(topBidVol)} (${topBidConcentration.toFixed(0)}% of all bids)`); confidence -= 20; }
+    if (topAskConcentration > 60 && askDropoff > 8) { isFakeWall = true; warnings.push(`🧱 Fake ask wall @ ${asks[0]?.price?.toFixed(2)} — ${_formatVol(topAskVol)} (${topAskConcentration.toFixed(0)}% of all asks)`); confidence -= 20; }
 
-    // Fake ASK wall
-    if (topAskConcentration > 60 && askDropoff > 8) {
-        isFakeWall = true;
-        warnings.push(`🧱 Fake ask wall @ ${asks[0]?.price?.toFixed(2)} — ${_formatVol(topAskVol)} (${topAskConcentration.toFixed(0)}% of all asks)`);
-        confidence -= 20;
-    }
+    if (upperCircuit > 0 && asks[0]?.price >= upperCircuit * 0.998 && topAskVol > totalAskVol * 0.35) { isFakeWall = true; warnings.push(`🚧 Ask wall at upper circuit — blocking rally`); confidence -= 10; }
+    if (lowerCircuit > 0 && bids[0]?.price <= lowerCircuit * 1.002 && topBidVol > totalBidVol * 0.35) { isFakeWall = true; warnings.push(`🚧 Bid wall at lower circuit — artificial support`); confidence -= 10; }
 
-    // Circuit-limit blocking walls (common in PSX)
-    if (upperCircuit > 0 && asks[0]?.price >= upperCircuit * 0.998 && topAskVol > totalAskVol * 0.35) {
-        isFakeWall = true;
-        warnings.push(`🚧 Ask wall at upper circuit — blocking rally`);
-        confidence -= 10;
-    }
-    if (lowerCircuit > 0 && bids[0]?.price <= lowerCircuit * 1.002 && topBidVol > totalBidVol * 0.35) {
-        isFakeWall = true;
-        warnings.push(`🚧 Bid wall at lower circuit — artificial support`);
-        confidence -= 10;
-    }
+    bids.slice(0, 3).forEach((b, i) => { if (isRoundPrice(b.price) && b.volume > 15000 && b.volume > ((bids[i + 1]?.volume || 1) * 5)) { isFakeWall = true; warnings.push(`🎯 Round-number bid ${b.price.toFixed(2)} with ${_formatVol(b.volume)} — no depth behind`); confidence -= 8; } });
+    asks.slice(0, 3).forEach((a, i) => { if (isRoundPrice(a.price) && a.volume > 15000 && a.volume > ((asks[i + 1]?.volume || 1) * 5)) { isFakeWall = true; warnings.push(`🎯 Round-number ask ${a.price.toFixed(2)} with ${_formatVol(a.volume)} — no depth behind`); confidence -= 8; } });
 
-    // Round-number large orders with sharp drop-off
-    bids.slice(0, 3).forEach((b, i) => {
-        if (isRoundPrice(b.price) && b.volume > 15000 && b.volume > ((bids[i + 1]?.volume || 1) * 5)) {
-            isFakeWall = true;
-            warnings.push(`🎯 Round-number bid ${b.price.toFixed(2)} with ${_formatVol(b.volume)} — no depth behind`);
-            confidence -= 8;
-        }
-    });
-    asks.slice(0, 3).forEach((a, i) => {
-        if (isRoundPrice(a.price) && a.volume > 15000 && a.volume > ((asks[i + 1]?.volume || 1) * 5)) {
-            isFakeWall = true;
-            warnings.push(`🎯 Round-number ask ${a.price.toFixed(2)} with ${_formatVol(a.volume)} — no depth behind`);
-            confidence -= 8;
-        }
-    });
+    if ((bidAskRatio > 5 || bidAskRatio < 0.2) && spreadPercent > 0.8) { isSpoofing = true; warnings.push(`👻 Extreme ratio (${bidAskRatio.toFixed(1)}) + wide spread — possible spoofing`); confidence -= 20; }
 
-    // ─── 3. SPOOFING INDICATORS ───
-    // Extreme ratio + wide spread = orders not committed
-    if ((bidAskRatio > 5 || bidAskRatio < 0.2) && spreadPercent > 0.8) {
-        isSpoofing = true;
-        warnings.push(`👻 Extreme ratio (${bidAskRatio.toFixed(1)}) + wide spread — possible spoofing`);
-        confidence -= 20;
-    }
-
-    // Top 3 levels contain >90% of entire side = no genuine depth
     const top3BidPct = (parsedBook.top3BidVol / totalBidVol) * 100;
     const top3AskPct = (parsedBook.top3AskVol / totalAskVol) * 100;
-    if (top3BidPct > 90 || top3AskPct > 90) {
-        isSpoofing = true;
-        warnings.push(`🎭 Book concentrated in top 3 levels — genuine depth lacking`);
-        confidence -= 15;
-    }
+    if (top3BidPct > 90 || top3AskPct > 90) { isSpoofing = true; warnings.push(`🎭 Book concentrated in top 3 levels — genuine depth lacking`); confidence -= 15; }
 
-    // Imbalance contradicts price action (smart money hiding)
     const priceChange = stockData?.changePercent || 0;
-    if (imbalance > 30 && priceChange < -1.5) {
-        warnings.push(`🎭 Book shows buying (+${imbalance}%) but price falling — hidden selling`);
-        confidence -= 10;
-    } else if (imbalance < -30 && priceChange > 1.5) {
-        warnings.push(`🎭 Book shows selling (${imbalance}%) but price rising — hidden buying`);
-        confidence -= 10;
-    }
+    if (imbalance > 30 && priceChange < -1.5) { warnings.push(`🎭 Book shows buying (+${imbalance}%) but price falling — hidden selling`); confidence -= 10; }
+    else if (imbalance < -30 && priceChange > 1.5) { warnings.push(`🎭 Book shows selling (${imbalance}%) but price rising — hidden buying`); confidence -= 10; }
 
-    // ─── 4. REAL SIGNAL ADJUSTMENT ───
     const signalRank = { 'STRONG_BUY': 4, 'BUY': 3, 'NEUTRAL': 2, 'SELL': 1, 'STRONG_SELL': 0 };
     const rankToSignal = ['STRONG_SELL', 'SELL', 'NEUTRAL', 'BUY', 'STRONG_BUY'];
     let level = signalRank[realSignal] ?? 2;
 
-    // If fake wall on dominant side, downgrade that bias
     if (isFakeWall) {
-        if (bidAskRatio > 1.3 && topBidConcentration > 50) {
-            level = Math.max(0, level - 2); // Downgrade buy signals
-            warnings.push('🔻 Downgraded: fake buy pressure detected');
-        } else if (bidAskRatio < 0.77 && topAskConcentration > 50) {
-            level = Math.min(4, level + 2); // Downgrade sell signals (actually bullish)
-            warnings.push('🔺 Upgraded: fake sell wall means real buying');
-        }
+        if (bidAskRatio > 1.3 && topBidConcentration > 50) { level = Math.max(0, level - 2); warnings.push('🔻 Downgraded: fake buy pressure detected'); }
+        else if (bidAskRatio < 0.77 && topAskConcentration > 50) { level = Math.min(4, level + 2); warnings.push('🔺 Upgraded: fake sell wall means real buying'); }
     }
 
-    if (isLowLiquidity && !isFakeWall) {
-        // Halve the distance from neutral for illiquid stocks
-        level = 2 + Math.round((level - 2) * 0.5);
-        warnings.push('⚖️ Signal dampened: low liquidity');
-    }
-
-    if (isSpoofing) {
-        level = 2; // Force neutral
-        warnings.push('⛔ Signal invalidated: spoofing detected');
-    }
+    if (isLowLiquidity && !isFakeWall) { level = 2 + Math.round((level - 2) * 0.5); warnings.push('⚖️ Signal dampened: low liquidity'); }
+    if (isSpoofing) { level = 2; warnings.push('⛔ Signal invalidated: spoofing detected'); }
 
     realSignal = rankToSignal[level] || 'NEUTRAL';
-
-    // ─── 5. FINAL CONFIDENCE ───
     confidence = Math.max(15, Math.min(100, confidence));
-
-    // Deduplicate and cap warnings
     const uniqueWarnings = [...new Set(warnings)];
 
-    return {
-        confidence,
-        isFakeWall,
-        isSpoofing,
-        isLowLiquidity,
-        warnings: uniqueWarnings.slice(0, 6),
-        realSignal
-    };
+    return { confidence, isFakeWall, isSpoofing, isLowLiquidity, warnings: uniqueWarnings.slice(0, 6), realSignal };
 }
 function _formatVol(v) { if (!v) return '0'; if (v >= 1000000) return (v/1000000).toFixed(1) + 'M'; if (v >= 1000) return (v/1000).toFixed(0) + 'K'; return v.toString(); }
 
@@ -342,17 +238,28 @@ async function fetchAnnouncementsAndBroadcast() {
     }
 }
 
+// ─── NEW: Enhanced Sector Analysis with Mood + Rotation + Signals ────────
 async function buildSectorAnalysis() {
     const [fipiData, newsSignal, announcements] = await Promise.all([
-        getFipiLipData().catch(() => null),
+        getFipiLipData({ stockData: stockCache.stocks }).catch(() => null),
         getQuickSignal().catch(() => null),
         getAnnouncements().catch(() => null)
     ]);
+
     const tradeSignals = tradingSignalService.generateSignals(
         stockCache.stocks || [],
         newsSignal,
-        announcements
+        announcements,
+        stockCache.kse100,
+        institutionalTracker.getAllSignals(),
+        orderFlowTracker.getAllBuyRatios()
     );
+
+    // NEW: Pass marketIndex for mood detection
+    const marketIndex = stockCache.kse100 ? { 
+        changePercent: stockCache.kse100.changePercent 
+    } : null;
+
     return sectorAnalysisService.analyze(
         stockCache.stocks || [],
         fipiData,
@@ -360,9 +267,18 @@ async function buildSectorAnalysis() {
         { signals: institutionalTracker.getActiveSignals(50) },
         tradeSignals,
         newsSignal,
-        announcements
+        announcements,
+        marketIndex
     );
 }
+
+// NEW: Build just the mood analysis (lightweight)
+async function buildMoodAnalysis() {
+    const fipiData = await getFipiLipData({ stockData: stockCache.stocks }).catch(() => null);
+    const marketIndex = stockCache.kse100 ? { changePercent: stockCache.kse100.changePercent } : null;
+    return institutionalMoodService.analyzeMood(fipiData, stockCache.stocks || [], marketIndex);
+}
+// ─────────────────────────────────────────────────────────────────────────
 
 // ============ WEBSOCKET ============
 wss.on('connection', (ws) => {
@@ -411,10 +327,10 @@ wss.on('connection', (ws) => {
         case 'GET_TRADING_SIGNALS': 
     try { 
         const ns = await getQuickSignal(); 
-        const ann = await getAnnouncements(); // This already returns full data
+        const ann = await getAnnouncements();
         ws.send(JSON.stringify({ 
             type: 'TRADING_SIGNALS', 
-            data: tradingSignalService.generateSignals(stockCache.stocks || [], ns, ann) 
+            data: tradingSignalService.generateSignals(stockCache.stocks || [], ns, ann, stockCache.kse100, institutionalTracker.getAllSignals(), orderFlowTracker.getAllBuyRatios()) 
         })); 
     } catch (e) { 
         ws.send(JSON.stringify({ type: 'TRADING_SIGNALS', data: [] })); 
@@ -425,7 +341,9 @@ wss.on('connection', (ws) => {
         case 'GET_INDEX_TRACKER': try { ws.send(JSON.stringify({ type: 'INDEX_TRACKER', data: indexTrackerService.getTrackerData() })); } catch (e) { ws.send(JSON.stringify({ type: 'INDEX_TRACKER', data: null })); } break;
         case 'GET_ORDERFLOW': try { const fd = orderFlowTracker.getData(); ws.send(JSON.stringify({ type: 'ORDERFLOW', data: { summary: fd.summary, remarks: fd.remarks, topStocks: orderFlowTracker.getTopStocks(15), hourlyFlow: orderFlowTracker.getHourlyFlow(), largeTrades: orderFlowTracker.getLargeTrades(20) } })); } catch (e) { ws.send(JSON.stringify({ type: 'ORDERFLOW', data: null })); } break;
         case 'GET_GLOBAL_INDICES': try { ws.send(JSON.stringify({ type: 'GLOBAL_INDICES', data: await globalIndicesService.fetchGlobalIndices() })); } catch (e) { ws.send(JSON.stringify({ type: 'GLOBAL_INDICES', data: null })); } break;
-        case 'ANALYZE_INSTITUTIONAL': try { const results = []; const topStocks = (stockCache.stocks || []).sort((a, b) => b.volume - a.volume).slice(0, 20); for (const stock of topStocks) { const ob = orderBookService.getCachedOrderBook(stock.symbol); const entry = await institutionalTracker.analyzeStock(stock, ob); if (entry) results.push({ symbol: stock.symbol, entry }); } ws.send(JSON.stringify({ type: 'INSTITUTIONAL_SIGNALS', data: { signals: institutionalTracker.getActiveSignals(55), alerts: institutionalTracker.getAlerts(10), analyzed: results.length } })); } catch (e) { ws.send(JSON.stringify({ type: 'INSTITUTIONAL_SIGNALS', data: { signals: [], alerts: [] } })); } break;
+        case 'ANALYZE_INSTITUTIONAL': try { const results = []; const topStocks = (stockCache.stocks || []).sort((a, b) => b.volume - a.volume).slice(0, 20); for (const stock of topStocks) { let ob = orderBookService.getCachedOrderBook(stock.symbol);
+if (!ob) ob = await fetchOrderBookForSymbol(stock.symbol);
+const entry = await institutionalTracker.analyzeStock(stock, ob); if (entry) results.push({ symbol: stock.symbol, entry }); } ws.send(JSON.stringify({ type: 'INSTITUTIONAL_SIGNALS', data: { signals: institutionalTracker.getActiveSignals(55), alerts: institutionalTracker.getAlerts(10), analyzed: results.length } })); } catch (e) { ws.send(JSON.stringify({ type: 'INSTITUTIONAL_SIGNALS', data: { signals: [], alerts: [] } })); } break;
         case 'GET_INSTITUTIONAL_SIGNALS': try { ws.send(JSON.stringify({ type: 'INSTITUTIONAL_SIGNALS', data: { signals: institutionalTracker.getActiveSignals(50), alerts: institutionalTracker.getAlerts(15) } })); } catch (e) { ws.send(JSON.stringify({ type: 'INSTITUTIONAL_SIGNALS', data: { signals: [], alerts: [] } })); } break;
         case 'GET_STOCK_INSTITUTIONAL': if (data.symbol) { try { ws.send(JSON.stringify({ type: 'STOCK_INSTITUTIONAL', symbol: data.symbol, data: institutionalTracker.getStockHistory(data.symbol) })); } catch (e) { ws.send(JSON.stringify({ type: 'STOCK_INSTITUTIONAL', symbol: data.symbol, data: null })); } } break;
 
@@ -443,7 +361,6 @@ wss.on('connection', (ws) => {
     }
     break;
 
-
         // ============ TRADE JOURNAL ============
         case 'OPEN_TRADE': try { ws.send(JSON.stringify({ type: 'TRADE_OPENED', data: tradeJournal.openTrade(data) })); } catch (e) { ws.send(JSON.stringify({ type: 'TRADE_ERROR', message: e.message })); } break;
         case 'CLOSE_TRADE': try { ws.send(JSON.stringify({ type: 'TRADE_CLOSED', data: tradeJournal.closeTrade(data.tradeId, data.exitPrice, data.reason||'MANUAL', data.note) })); } catch (e) { ws.send(JSON.stringify({ type: 'TRADE_ERROR', message: e.message })); } break;
@@ -451,34 +368,77 @@ wss.on('connection', (ws) => {
         case 'GET_TRADES': try { ws.send(JSON.stringify({ type: 'TRADES_DATA', data: tradeJournal.getAllTrades() })); } catch (e) { ws.send(JSON.stringify({ type: 'TRADES_DATA', data: null })); } break;
         case 'TAKE_TRADE_FROM_SIGNAL': try { const { signal } = data; const trade = tradeJournal.openTrade({ symbol: signal.symbol, name: signal.name, signal: signal.signal, tradeType: signal.tradeType||'DAY', entryPrice: signal.entryPrice||signal.price, targetPrice: signal.targetPrice, stopLoss: signal.stopLoss, quantity: data.quantity||calculateQuantity(signal), riskReward: signal.riskReward, riskLevel: signal.riskLevel, source: 'SIGNAL_TAB' }); ws.send(JSON.stringify({ type: 'TRADE_OPENED', data: trade })); } catch (e) { ws.send(JSON.stringify({ type: 'TRADE_ERROR', message: e.message })); } break;
 
+        // ─── NEW: Enhanced FIPI/LIPI with Mood ────────────────────────────
         case 'GET_FIPILIPI':
-    try {
-        const fipiData = await getFipiLipData();
-        ws.send(JSON.stringify({ type: 'FIPILIPI_DATA', data: fipiData }));
-    } catch (e) {
-        ws.send(JSON.stringify({ type: 'FIPILIPI_DATA', data: null }));
-    }
-    break;
+            try {
+                const fipiData = await getFipiLipData({ stockData: stockCache.stocks });
+                const marketIndex = stockCache.kse100 ? { changePercent: stockCache.kse100.changePercent } : null;
+                const moodAnalysis = institutionalMoodService.analyzeMood(fipiData, stockCache.stocks || [], marketIndex);
+                ws.send(JSON.stringify({ 
+                    type: 'FIPILIPI_DATA', 
+                    data: {
+                        ...fipiData,
+                        institutionalMood: moodAnalysis
+                    }
+                }));
+            } catch (e) {
+                ws.send(JSON.stringify({ type: 'FIPILIPI_DATA', data: null }));
+            }
+            break;
 
-case 'GET_FIPILIPI_WEEKLY':
-    try {
-        const weeklyData = await getWeeklyTrend();
-        ws.send(JSON.stringify({ type: 'FIPILIPI_WEEKLY', data: weeklyData }));
-    } catch (e) {
-        ws.send(JSON.stringify({ type: 'FIPILIPI_WEEKLY', data: [] }));
-    }
-    break;
+        case 'GET_FIPILIPI_WEEKLY':
+            try {
+                const weeklyData = await getWeeklyTrend();
+                ws.send(JSON.stringify({ type: 'FIPILIPI_WEEKLY', data: weeklyData }));
+            } catch (e) {
+                ws.send(JSON.stringify({ type: 'FIPILIPI_WEEKLY', data: [] }));
+            }
+            break;
 
-case 'GET_SECTORS':
-    try {
-        const sectors = await buildSectorAnalysis();
-        ws.send(JSON.stringify({ type: 'SECTORS_DATA', data: { sectors } }));
-    } catch (e) {
-        console.error('Sector analysis error:', e);
-        ws.send(JSON.stringify({ type: 'SECTORS_DATA', data: { sectors: [] } }));
-    }
-    break;
+        // ─── NEW: Institutional Mood endpoint ─────────────────────────────
+        case 'GET_INSTITUTIONAL_MOOD':
+            try {
+                const moodAnalysis = await buildMoodAnalysis();
+                ws.send(JSON.stringify({ 
+                    type: 'INSTITUTIONAL_MOOD', 
+                    data: moodAnalysis 
+                }));
+            } catch (e) {
+                ws.send(JSON.stringify({ type: 'INSTITUTIONAL_MOOD', data: null }));
+            }
+            break;
 
+        // ─── NEW: Smart Money Signals endpoint ────────────────────────────
+        case 'GET_SMART_MONEY_SIGNALS':
+            try {
+                const analysis = await buildSectorAnalysis();
+                ws.send(JSON.stringify({ 
+                    type: 'SMART_MONEY_SIGNALS', 
+                    data: analysis.signals 
+                }));
+            } catch (e) {
+                ws.send(JSON.stringify({ type: 'SMART_MONEY_SIGNALS', data: null }));
+            }
+            break;
+
+        case 'GET_SECTORS':
+            try {
+                const analysis = await buildSectorAnalysis();
+                ws.send(JSON.stringify({ 
+                    type: 'SECTORS_DATA', 
+                    data: { 
+                        sectors: analysis.sectors,
+                        institutionalMood: analysis.institutionalMood,
+                        sectorRotation: analysis.sectorRotation,
+                        signals: analysis.signals,
+                        executiveSummary: analysis.executiveSummary
+                    }
+                }));
+            } catch (e) {
+                console.error('Sector analysis error:', e);
+                ws.send(JSON.stringify({ type: 'SECTORS_DATA', data: { sectors: [] } }));
+            }
+            break;
 
         case 'SEARCH': ws.send(JSON.stringify({ type: 'SEARCH_RESULTS', data: (stockCache.stocks||[]).filter(s => s.symbol.toLowerCase().includes((data.query||'').toLowerCase()) || s.name.toLowerCase().includes((data.query||'').toLowerCase())).slice(0, 20) })); break;
         case 'PING': ws.send(JSON.stringify({ type: 'PONG' })); break;
@@ -497,7 +457,7 @@ async function updateStocks() {
     const data = await fetchAllStocks();
     if (data.stocks.length > 0) {
       stockCache = data;
-      tradeJournal.updateTrades(stockCache.stocks); // Update open trades
+      tradeJournal.updateTrades(stockCache.stocks);
       broadcast({ type: 'MARKET_UPDATE', data: data, timestamp: Date.now() });
       const now = new Date(); const minutes = now.getMinutes();
       if (minutes % 15 === 0 && stockCache.kse100) indexTrackerService.recordSnapshot(stockCache.kse100, null);
@@ -529,25 +489,47 @@ async function start() {
     setInterval(async () => { if (stockCache.stocks?.length > 0 && tradingSignalService.isMarketOpen()) { try { await orderFlowTracker.trackSymbols([], stockCache.stocks); } catch (e) {} } }, ORDERFLOW_TRACK_INTERVAL);
     setInterval(() => { if (stockCache.stocks?.length > 0) broadcast({ type: 'ORDERFLOW_SUMMARY', data: orderFlowTracker.getSummary() }); }, ORDERFLOW_BROADCAST_INTERVAL);
     setInterval(async () => { try { await globalIndicesService.fetchGlobalIndices(); } catch (e) {} }, GLOBAL_INDICES_INTERVAL);
-    setInterval(async () => { if (stockCache.stocks?.length > 0 && tradingSignalService.isMarketOpen()) { try { const topStocks = stockCache.stocks.sort((a,b)=>b.volume-a.volume).slice(0,15); for (const stock of topStocks) { const ob = orderBookService.getCachedOrderBook(stock.symbol); await institutionalTracker.analyzeStock(stock, ob); } const signals = institutionalTracker.getActiveSignals(60); if (signals.length > 0) broadcast({ type: 'INSTITUTIONAL_SIGNALS', data: { signals, alerts: institutionalTracker.getAlerts(5) } }); } catch (e) {} } }, INSTITUTIONAL_INTERVAL);
-    // FIPI/LIPI data refresh every 5 minutes
-setInterval(async () => {
-    try {
-        const fipiData = await getFipiLipData({ forceRefresh: true });
-        if (fipiData) {
-            broadcast({ type: 'FIPILIPI_DATA', data: fipiData });
-        }
-    } catch (e) {}
-}, 300000);
-// Sector analysis broadcast every 2 minutes
-setInterval(async () => {
-    if (!isLoggedIn || !stockCache.stocks?.length) return;
-    try {
-        const sectors = await buildSectorAnalysis();
-        broadcast({ type: 'SECTORS_DATA', data: { sectors } });
-    } catch (e) {}
-}, 120000);
-    console.log('✅ System ready\n');
+    setInterval(async () => { if (stockCache.stocks?.length > 0 && tradingSignalService.isMarketOpen()) { try { const topStocks = stockCache.stocks.sort((a,b)=>b.volume-a.volume).slice(0,15); for (const stock of topStocks) { let ob = orderBookService.getCachedOrderBook(stock.symbol);
+if (!ob) ob = await fetchOrderBookForSymbol(stock.symbol);
+await institutionalTracker.analyzeStock(stock, ob); } const signals = institutionalTracker.getActiveSignals(60); if (signals.length > 0) broadcast({ type: 'INSTITUTIONAL_SIGNALS', data: { signals, alerts: institutionalTracker.getAlerts(5) } }); } catch (e) {} } }, INSTITUTIONAL_INTERVAL);
+
+    // ─── NEW: Enhanced FIPI/LIPI with Mood broadcast every 5 min ───────
+    setInterval(async () => {
+        try {
+            const fipiData = await getFipiLipData({ forceRefresh: true, stockData: stockCache.stocks });
+            if (fipiData) {
+                const marketIndex = stockCache.kse100 ? { changePercent: stockCache.kse100.changePercent } : null;
+                const moodAnalysis = institutionalMoodService.analyzeMood(fipiData, stockCache.stocks || [], marketIndex);
+                broadcast({ 
+                    type: 'FIPILIPI_DATA', 
+                    data: {
+                        ...fipiData,
+                        institutionalMood: moodAnalysis
+                    }
+                });
+            }
+        } catch (e) {}
+    }, 300000);
+
+    // ─── NEW: Full sector analysis with mood + rotation every 2 min ────
+    setInterval(async () => {
+        if (!isLoggedIn || !stockCache.stocks?.length) return;
+        try {
+            const analysis = await buildSectorAnalysis();
+            broadcast({ 
+                type: 'SECTORS_DATA', 
+                data: { 
+                    sectors: analysis.sectors,
+                    institutionalMood: analysis.institutionalMood,
+                    sectorRotation: analysis.sectorRotation,
+                    signals: analysis.signals,
+                    executiveSummary: analysis.executiveSummary
+                }
+            });
+        } catch (e) {}
+    }, 120000);
+
+    console.log('✅ System ready (Smart Money v2)\n');
   }
   const PORT = process.env.PORT || 5001;
   server.listen(PORT, () => console.log(`🚀 Server on http://localhost:${PORT}\n`));

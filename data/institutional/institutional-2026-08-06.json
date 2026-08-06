@@ -34,10 +34,41 @@
           "emoji": "👀",
           "reasons": [],
           "previousSignal": "NEUTRAL"
+        },
+        {
+          "time": "03:15",
+          "price": 36,
+          "volume": 66023844,
+          "changePercent": 3.6,
+          "bidVol": 422377,
+          "askVol": 0,
+          "bidAskRatio": 1,
+          "imbalance": 100,
+          "spreadPercent": 0,
+          "top3BidVol": 422377,
+          "top3AskVol": 0,
+          "largeBids": 1,
+          "largeAsks": 0,
+          "bestBid": 36,
+          "bestAsk": 36,
+          "trapConfidence": 50,
+          "score": 52,
+          "components": {
+            "orderBookDelta": 50,
+            "priceVolume": 58,
+            "largeOrders": 50,
+            "marketStructure": 50
+          },
+          "signal": "WATCH",
+          "emoji": "👀",
+          "reasons": [
+            "Heavy imbalance 100%"
+          ],
+          "previousSignal": "WATCH"
         }
       ],
       "currentSignal": "WATCH",
-      "signalStrength": 50,
+      "signalStrength": 52,
       "lastAlert": null
     },
     "UNITY": {
@@ -73,6 +104,35 @@
           "emoji": "👀",
           "reasons": [],
           "previousSignal": "NEUTRAL"
+        },
+        {
+          "time": "03:15",
+          "price": 11.9,
+          "volume": 62508135,
+          "changePercent": 6.82,
+          "bidVol": 0,
+          "askVol": 73187,
+          "bidAskRatio": 1,
+          "imbalance": -100,
+          "spreadPercent": 0,
+          "top3BidVol": 0,
+          "top3AskVol": 73187,
+          "largeBids": 0,
+          "largeAsks": 1,
+          "bestBid": 11.9,
+          "bestAsk": 11.9,
+          "trapConfidence": 50,
+          "score": 50,
+          "components": {
+            "orderBookDelta": 50,
+            "priceVolume": 50,
+            "largeOrders": 50,
+            "marketStructure": 50
+          },
+          "signal": "WATCH",
+          "emoji": "👀",
+          "reasons": [],
+          "previousSignal": "WATCH"
         }
       ],
       "currentSignal": "WATCH",
@@ -112,10 +172,41 @@
           "emoji": "👀",
           "reasons": [],
           "previousSignal": "NEUTRAL"
+        },
+        {
+          "time": "03:15",
+          "price": 11.25,
+          "volume": 56219311,
+          "changePercent": 1.72,
+          "bidVol": 2864364,
+          "askVol": 0,
+          "bidAskRatio": 1,
+          "imbalance": 100,
+          "spreadPercent": 0,
+          "top3BidVol": 2864364,
+          "top3AskVol": 0,
+          "largeBids": 1,
+          "largeAsks": 0,
+          "bestBid": 11.25,
+          "bestAsk": 11.25,
+          "trapConfidence": 50,
+          "score": 52,
+          "components": {
+            "orderBookDelta": 50,
+            "priceVolume": 58,
+            "largeOrders": 50,
+            "marketStructure": 50
+          },
+          "signal": "WATCH",
+          "emoji": "👀",
+          "reasons": [
+            "Heavy imbalance 100%"
+          ],
+          "previousSignal": "WATCH"
         }
       ],
       "currentSignal": "WATCH",
-      "signalStrength": 50,
+      "signalStrength": 52,
       "lastAlert": null
     },
     "TSBL": {
@@ -151,6 +242,35 @@
           "emoji": "👀",
           "reasons": [],
           "previousSignal": "NEUTRAL"
+        },
+        {
+          "time": "03:15",
+          "price": 2.39,
+          "volume": 32748672,
+          "changePercent": -2.85,
+          "bidVol": 0,
+          "askVol": 53201,
+          "bidAskRatio": 1,
+          "imbalance": -100,
+          "spreadPercent": 0,
+          "top3BidVol": 0,
+          "top3AskVol": 53201,
+          "largeBids": 0,
+          "largeAsks": 1,
+          "bestBid": 2.39,
+          "bestAsk": 2.39,
+          "trapConfidence": 50,
+          "score": 50,
+          "components": {
+            "orderBookDelta": 50,
+            "priceVolume": 50,
+            "largeOrders": 50,
+            "marketStructure": 50
+          },
+          "signal": "WATCH",
+          "emoji": "👀",
+          "reasons": [],
+          "previousSignal": "WATCH"
         }
       ],
       "currentSignal": "WATCH",
@@ -190,10 +310,41 @@
           "emoji": "👀",
           "reasons": [],
           "previousSignal": "NEUTRAL"
+        },
+        {
+          "time": "03:15",
+          "price": 103.09,
+          "volume": 30408553,
+          "changePercent": 5.26,
+          "bidVol": 143852,
+          "askVol": 0,
+          "bidAskRatio": 1,
+          "imbalance": 100,
+          "spreadPercent": 0,
+          "top3BidVol": 143852,
+          "top3AskVol": 0,
+          "largeBids": 1,
+          "largeAsks": 0,
+          "bestBid": 103.09,
+          "bestAsk": 103.09,
+          "trapConfidence": 50,
+          "score": 52,
+          "components": {
+            "orderBookDelta": 50,
+            "priceVolume": 58,
+            "largeOrders": 50,
+            "marketStructure": 50
+          },
+          "signal": "WATCH",
+          "emoji": "👀",
+          "reasons": [
+            "Heavy imbalance 100%"
+          ],
+          "previousSignal": "WATCH"
         }
       ],
       "currentSignal": "WATCH",
-      "signalStrength": 50,
+      "signalStrength": 52,
       "lastAlert": null
     },
     "PACE": {
@@ -229,10 +380,41 @@
           "emoji": "👀",
           "reasons": [],
           "previousSignal": "NEUTRAL"
+        },
+        {
+          "time": "03:15",
+          "price": 11.06,
+          "volume": 26004112,
+          "changePercent": 1.75,
+          "bidVol": 5510,
+          "askVol": 0,
+          "bidAskRatio": 1,
+          "imbalance": 100,
+          "spreadPercent": 0,
+          "top3BidVol": 5510,
+          "top3AskVol": 0,
+          "largeBids": 1,
+          "largeAsks": 0,
+          "bestBid": 11.06,
+          "bestAsk": 11.06,
+          "trapConfidence": 50,
+          "score": 52,
+          "components": {
+            "orderBookDelta": 50,
+            "priceVolume": 58,
+            "largeOrders": 50,
+            "marketStructure": 50
+          },
+          "signal": "WATCH",
+          "emoji": "👀",
+          "reasons": [
+            "Heavy imbalance 100%"
+          ],
+          "previousSignal": "WATCH"
         }
       ],
       "currentSignal": "WATCH",
-      "signalStrength": 50,
+      "signalStrength": 52,
       "lastAlert": null
     },
     "WTL": {
@@ -268,10 +450,41 @@
           "emoji": "👀",
           "reasons": [],
           "previousSignal": "NEUTRAL"
+        },
+        {
+          "time": "03:15",
+          "price": 1.22,
+          "volume": 22085414,
+          "changePercent": -1.61,
+          "bidVol": 434808,
+          "askVol": 0,
+          "bidAskRatio": 1,
+          "imbalance": 100,
+          "spreadPercent": 0,
+          "top3BidVol": 434808,
+          "top3AskVol": 0,
+          "largeBids": 1,
+          "largeAsks": 0,
+          "bestBid": 1.22,
+          "bestAsk": 1.22,
+          "trapConfidence": 50,
+          "score": 52,
+          "components": {
+            "orderBookDelta": 50,
+            "priceVolume": 58,
+            "largeOrders": 50,
+            "marketStructure": 50
+          },
+          "signal": "WATCH",
+          "emoji": "👀",
+          "reasons": [
+            "Heavy imbalance 100%"
+          ],
+          "previousSignal": "WATCH"
         }
       ],
       "currentSignal": "WATCH",
-      "signalStrength": 50,
+      "signalStrength": 52,
       "lastAlert": null
     },
     "PIBTL": {
@@ -307,10 +520,41 @@
           "emoji": "👀",
           "reasons": [],
           "previousSignal": "NEUTRAL"
+        },
+        {
+          "time": "03:15",
+          "price": 16.9,
+          "volume": 20540858,
+          "changePercent": 0.72,
+          "bidVol": 43679,
+          "askVol": 0,
+          "bidAskRatio": 1,
+          "imbalance": 100,
+          "spreadPercent": 0,
+          "top3BidVol": 43679,
+          "top3AskVol": 0,
+          "largeBids": 1,
+          "largeAsks": 0,
+          "bestBid": 16.9,
+          "bestAsk": 16.9,
+          "trapConfidence": 50,
+          "score": 52,
+          "components": {
+            "orderBookDelta": 50,
+            "priceVolume": 58,
+            "largeOrders": 50,
+            "marketStructure": 50
+          },
+          "signal": "WATCH",
+          "emoji": "👀",
+          "reasons": [
+            "Heavy imbalance 100%"
+          ],
+          "previousSignal": "WATCH"
         }
       ],
       "currentSignal": "WATCH",
-      "signalStrength": 50,
+      "signalStrength": 52,
       "lastAlert": null
     },
     "SERF": {
@@ -346,6 +590,35 @@
           "emoji": "👀",
           "reasons": [],
           "previousSignal": "NEUTRAL"
+        },
+        {
+          "time": "03:15",
+          "price": 12.93,
+          "volume": 17868000,
+          "changePercent": 0.47,
+          "bidVol": 0,
+          "askVol": 0,
+          "bidAskRatio": 1,
+          "imbalance": 0,
+          "spreadPercent": 0,
+          "top3BidVol": 0,
+          "top3AskVol": 0,
+          "largeBids": 0,
+          "largeAsks": 0,
+          "bestBid": 0,
+          "bestAsk": 0,
+          "trapConfidence": 50,
+          "score": 50,
+          "components": {
+            "orderBookDelta": 50,
+            "priceVolume": 50,
+            "largeOrders": 50,
+            "marketStructure": 50
+          },
+          "signal": "WATCH",
+          "emoji": "👀",
+          "reasons": [],
+          "previousSignal": "WATCH"
         }
       ],
       "currentSignal": "WATCH",
@@ -385,6 +658,35 @@
           "emoji": "👀",
           "reasons": [],
           "previousSignal": "NEUTRAL"
+        },
+        {
+          "time": "03:15",
+          "price": 14.97,
+          "volume": 16352135,
+          "changePercent": 1.29,
+          "bidVol": 0,
+          "askVol": 84679,
+          "bidAskRatio": 1,
+          "imbalance": -100,
+          "spreadPercent": 0,
+          "top3BidVol": 0,
+          "top3AskVol": 84679,
+          "largeBids": 0,
+          "largeAsks": 1,
+          "bestBid": 14.97,
+          "bestAsk": 14.97,
+          "trapConfidence": 50,
+          "score": 50,
+          "components": {
+            "orderBookDelta": 50,
+            "priceVolume": 50,
+            "largeOrders": 50,
+            "marketStructure": 50
+          },
+          "signal": "WATCH",
+          "emoji": "👀",
+          "reasons": [],
+          "previousSignal": "WATCH"
         }
       ],
       "currentSignal": "WATCH",
@@ -424,6 +726,35 @@
           "emoji": "👀",
           "reasons": [],
           "previousSignal": "NEUTRAL"
+        },
+        {
+          "time": "03:15",
+          "price": 6.17,
+          "volume": 15096693,
+          "changePercent": 5.83,
+          "bidVol": 0,
+          "askVol": 51924,
+          "bidAskRatio": 1,
+          "imbalance": -100,
+          "spreadPercent": 0,
+          "top3BidVol": 0,
+          "top3AskVol": 51924,
+          "largeBids": 0,
+          "largeAsks": 1,
+          "bestBid": 6.17,
+          "bestAsk": 6.17,
+          "trapConfidence": 50,
+          "score": 50,
+          "components": {
+            "orderBookDelta": 50,
+            "priceVolume": 50,
+            "largeOrders": 50,
+            "marketStructure": 50
+          },
+          "signal": "WATCH",
+          "emoji": "👀",
+          "reasons": [],
+          "previousSignal": "WATCH"
         }
       ],
       "currentSignal": "WATCH",
@@ -463,10 +794,41 @@
           "emoji": "👀",
           "reasons": [],
           "previousSignal": "NEUTRAL"
+        },
+        {
+          "time": "03:15",
+          "price": 61.92,
+          "volume": 14299695,
+          "changePercent": 9.75,
+          "bidVol": 2079363,
+          "askVol": 0,
+          "bidAskRatio": 1,
+          "imbalance": 100,
+          "spreadPercent": 0,
+          "top3BidVol": 2079363,
+          "top3AskVol": 0,
+          "largeBids": 1,
+          "largeAsks": 0,
+          "bestBid": 61.92,
+          "bestAsk": 61.92,
+          "trapConfidence": 50,
+          "score": 52,
+          "components": {
+            "orderBookDelta": 50,
+            "priceVolume": 58,
+            "largeOrders": 50,
+            "marketStructure": 50
+          },
+          "signal": "WATCH",
+          "emoji": "👀",
+          "reasons": [
+            "Heavy imbalance 100%"
+          ],
+          "previousSignal": "WATCH"
         }
       ],
       "currentSignal": "WATCH",
-      "signalStrength": 50,
+      "signalStrength": 52,
       "lastAlert": null
     },
     "BYCO": {
@@ -502,6 +864,35 @@
           "emoji": "👀",
           "reasons": [],
           "previousSignal": "NEUTRAL"
+        },
+        {
+          "time": "03:15",
+          "price": 6.17,
+          "volume": 13939000,
+          "changePercent": -3.44,
+          "bidVol": 0,
+          "askVol": 0,
+          "bidAskRatio": 1,
+          "imbalance": 0,
+          "spreadPercent": 0,
+          "top3BidVol": 0,
+          "top3AskVol": 0,
+          "largeBids": 0,
+          "largeAsks": 0,
+          "bestBid": 0,
+          "bestAsk": 0,
+          "trapConfidence": 50,
+          "score": 50,
+          "components": {
+            "orderBookDelta": 50,
+            "priceVolume": 50,
+            "largeOrders": 50,
+            "marketStructure": 50
+          },
+          "signal": "WATCH",
+          "emoji": "👀",
+          "reasons": [],
+          "previousSignal": "WATCH"
         }
       ],
       "currentSignal": "WATCH",
@@ -541,10 +932,41 @@
           "emoji": "👀",
           "reasons": [],
           "previousSignal": "NEUTRAL"
+        },
+        {
+          "time": "03:15",
+          "price": 63.81,
+          "volume": 13534400,
+          "changePercent": 0.25,
+          "bidVol": 60302,
+          "askVol": 0,
+          "bidAskRatio": 1,
+          "imbalance": 100,
+          "spreadPercent": 0,
+          "top3BidVol": 60302,
+          "top3AskVol": 0,
+          "largeBids": 1,
+          "largeAsks": 0,
+          "bestBid": 63.81,
+          "bestAsk": 63.81,
+          "trapConfidence": 50,
+          "score": 52,
+          "components": {
+            "orderBookDelta": 50,
+            "priceVolume": 58,
+            "largeOrders": 50,
+            "marketStructure": 50
+          },
+          "signal": "WATCH",
+          "emoji": "👀",
+          "reasons": [
+            "Heavy imbalance 100%"
+          ],
+          "previousSignal": "WATCH"
         }
       ],
       "currentSignal": "WATCH",
-      "signalStrength": 50,
+      "signalStrength": 52,
       "lastAlert": null
     },
     "PAEL": {
@@ -580,10 +1002,41 @@
           "emoji": "👀",
           "reasons": [],
           "previousSignal": "NEUTRAL"
+        },
+        {
+          "time": "03:15",
+          "price": 44.38,
+          "volume": 13424046,
+          "changePercent": 4.92,
+          "bidVol": 492373,
+          "askVol": 0,
+          "bidAskRatio": 1,
+          "imbalance": 100,
+          "spreadPercent": 0,
+          "top3BidVol": 492373,
+          "top3AskVol": 0,
+          "largeBids": 1,
+          "largeAsks": 0,
+          "bestBid": 44.38,
+          "bestAsk": 44.38,
+          "trapConfidence": 50,
+          "score": 52,
+          "components": {
+            "orderBookDelta": 50,
+            "priceVolume": 58,
+            "largeOrders": 50,
+            "marketStructure": 50
+          },
+          "signal": "WATCH",
+          "emoji": "👀",
+          "reasons": [
+            "Heavy imbalance 100%"
+          ],
+          "previousSignal": "WATCH"
         }
       ],
       "currentSignal": "WATCH",
-      "signalStrength": 50,
+      "signalStrength": 52,
       "lastAlert": null
     },
     "KEL": {
@@ -619,10 +1072,41 @@
           "emoji": "👀",
           "reasons": [],
           "previousSignal": "NEUTRAL"
+        },
+        {
+          "time": "03:15",
+          "price": 7.42,
+          "volume": 12685679,
+          "changePercent": 1.37,
+          "bidVol": 611,
+          "askVol": 0,
+          "bidAskRatio": 1,
+          "imbalance": 100,
+          "spreadPercent": 0,
+          "top3BidVol": 611,
+          "top3AskVol": 0,
+          "largeBids": 0,
+          "largeAsks": 0,
+          "bestBid": 7.42,
+          "bestAsk": 7.42,
+          "trapConfidence": 50,
+          "score": 52,
+          "components": {
+            "orderBookDelta": 50,
+            "priceVolume": 58,
+            "largeOrders": 50,
+            "marketStructure": 50
+          },
+          "signal": "WATCH",
+          "emoji": "👀",
+          "reasons": [
+            "Heavy imbalance 100%"
+          ],
+          "previousSignal": "WATCH"
         }
       ],
       "currentSignal": "WATCH",
-      "signalStrength": 50,
+      "signalStrength": 52,
       "lastAlert": null
     },
     "TPL": {
@@ -658,6 +1142,35 @@
           "emoji": "👀",
           "reasons": [],
           "previousSignal": "NEUTRAL"
+        },
+        {
+          "time": "03:15",
+          "price": 20.34,
+          "volume": 11835240,
+          "changePercent": 4.85,
+          "bidVol": 0,
+          "askVol": 45150,
+          "bidAskRatio": 1,
+          "imbalance": -100,
+          "spreadPercent": 0,
+          "top3BidVol": 0,
+          "top3AskVol": 45150,
+          "largeBids": 0,
+          "largeAsks": 1,
+          "bestBid": 20.34,
+          "bestAsk": 20.34,
+          "trapConfidence": 50,
+          "score": 50,
+          "components": {
+            "orderBookDelta": 50,
+            "priceVolume": 50,
+            "largeOrders": 50,
+            "marketStructure": 50
+          },
+          "signal": "WATCH",
+          "emoji": "👀",
+          "reasons": [],
+          "previousSignal": "WATCH"
         }
       ],
       "currentSignal": "WATCH",
@@ -697,10 +1210,41 @@
           "emoji": "👀",
           "reasons": [],
           "previousSignal": "NEUTRAL"
+        },
+        {
+          "time": "03:15",
+          "price": 6.71,
+          "volume": 11530241,
+          "changePercent": -0.15,
+          "bidVol": 6919,
+          "askVol": 0,
+          "bidAskRatio": 1,
+          "imbalance": 100,
+          "spreadPercent": 0,
+          "top3BidVol": 6919,
+          "top3AskVol": 0,
+          "largeBids": 1,
+          "largeAsks": 0,
+          "bestBid": 6.71,
+          "bestAsk": 6.71,
+          "trapConfidence": 50,
+          "score": 52,
+          "components": {
+            "orderBookDelta": 50,
+            "priceVolume": 58,
+            "largeOrders": 50,
+            "marketStructure": 50
+          },
+          "signal": "WATCH",
+          "emoji": "👀",
+          "reasons": [
+            "Heavy imbalance 100%"
+          ],
+          "previousSignal": "WATCH"
         }
       ],
       "currentSignal": "WATCH",
-      "signalStrength": 50,
+      "signalStrength": 52,
       "lastAlert": null
     },
     "TOMCL": {
@@ -736,10 +1280,41 @@
           "emoji": "👀",
           "reasons": [],
           "previousSignal": "NEUTRAL"
+        },
+        {
+          "time": "03:15",
+          "price": 40.84,
+          "volume": 11417593,
+          "changePercent": 9.37,
+          "bidVol": 1140896,
+          "askVol": 0,
+          "bidAskRatio": 1,
+          "imbalance": 100,
+          "spreadPercent": 0,
+          "top3BidVol": 1140896,
+          "top3AskVol": 0,
+          "largeBids": 1,
+          "largeAsks": 0,
+          "bestBid": 40.84,
+          "bestAsk": 40.84,
+          "trapConfidence": 50,
+          "score": 52,
+          "components": {
+            "orderBookDelta": 50,
+            "priceVolume": 58,
+            "largeOrders": 50,
+            "marketStructure": 50
+          },
+          "signal": "WATCH",
+          "emoji": "👀",
+          "reasons": [
+            "Heavy imbalance 100%"
+          ],
+          "previousSignal": "WATCH"
         }
       ],
       "currentSignal": "WATCH",
-      "signalStrength": 50,
+      "signalStrength": 52,
       "lastAlert": null
     },
     "FCCL": {
@@ -775,10 +1350,41 @@
           "emoji": "👀",
           "reasons": [],
           "previousSignal": "NEUTRAL"
+        },
+        {
+          "time": "03:15",
+          "price": 56.88,
+          "volume": 10972704,
+          "changePercent": 0.81,
+          "bidVol": 11391,
+          "askVol": 0,
+          "bidAskRatio": 1,
+          "imbalance": 100,
+          "spreadPercent": 0,
+          "top3BidVol": 11391,
+          "top3AskVol": 0,
+          "largeBids": 1,
+          "largeAsks": 0,
+          "bestBid": 56.88,
+          "bestAsk": 56.88,
+          "trapConfidence": 50,
+          "score": 52,
+          "components": {
+            "orderBookDelta": 50,
+            "priceVolume": 58,
+            "largeOrders": 50,
+            "marketStructure": 50
+          },
+          "signal": "WATCH",
+          "emoji": "👀",
+          "reasons": [
+            "Heavy imbalance 100%"
+          ],
+          "previousSignal": "WATCH"
         }
       ],
       "currentSignal": "WATCH",
-      "signalStrength": 50,
+      "signalStrength": 52,
       "lastAlert": null
     }
   },
@@ -788,6 +1394,6 @@
     "strongBuySignals": 0,
     "buySignals": 0,
     "sellSignals": 0,
-    "lastUpdated": "2026-08-06T19:40:54.179Z"
+    "lastUpdated": "2026-08-06T23:17:40.387Z"
   }
 }

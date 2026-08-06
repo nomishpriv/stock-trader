@@ -188,7 +188,7 @@ class TradingSignalService {
         return +target.toFixed(2);
     }
 
-    generateSignals(stocks, newsData, announcements, marketIndex = null) {
+    generateSignals(stocks, newsData, announcements, marketIndex = null, institutionalSignals = {}, orderFlowRatios = {}) {
         if (!stocks || !stocks.length) return [];
         const signals = [];
         const marketOpen = this.isMarketOpen();
@@ -294,6 +294,24 @@ class TradingSignalService {
 
             // ✅ NEW: Blue-chip bonus (quality premium)
             if (isBlueChip) { score += 2; reasons.push('Blue-chip quality'); }
+
+            // ✅ NEW: Confluence with institutional tracker
+            const instData = institutionalSignals[stock.symbol];
+            if (instData) {
+                if (instData.signal === 'STRONG_INSTITUTIONAL_BUY') { score += 5; reasons.push('🐋🐋 Institutional strong buy'); }
+                else if (instData.signal === 'INSTITUTIONAL_BUY' || instData.signal === 'BUILDING') { score += 3; reasons.push('🐋 Institutional buying'); }
+                else if (instData.signal === 'DISTRIBUTION') { score -= 5; reasons.push('🔴 Institutional distribution — conflict'); }
+                else if (instData.signal === 'WEAKENING') { score -= 3; reasons.push('📉 Institutional weakening — conflict'); }
+            }
+
+            // ✅ NEW: Confluence with order-flow tracker
+            const flowRatio = orderFlowRatios[stock.symbol];
+            if (flowRatio !== undefined) {
+                if (flowRatio > 60) { score += 3; reasons.push(`Order flow buy-heavy (${flowRatio}%)`); }
+                else if (flowRatio > 55) { score += 1; reasons.push('Order flow mildly buy-heavy'); }
+                else if (flowRatio < 40) { score -= 3; reasons.push(`Order flow sell-heavy (${flowRatio}%)`); }
+                else if (flowRatio < 45) { score -= 1; reasons.push('Order flow mildly sell-heavy'); }
+            }
 
             // Trade Type Determination
             if (volRatio > 2 && Math.abs(stock.changePercent) > 2) type.push('DAY');
@@ -414,6 +432,43 @@ class TradingSignalService {
         const ann = announcements.announcements.find(a => a.symbol === stock.symbol);
         if (!ann) return 50;
         return 50 + (ann.score * 4);
+    }
+
+    // ✅ Pre-market gap scanner
+    isPreOpenWindow() {
+        const now = new Date();
+        const pkTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Karachi' }));
+        const h = pkTime.getHours(), m = pkTime.getMinutes();
+        const afterStart = h > this.preOpenStart.hour || (h === this.preOpenStart.hour && m >= this.preOpenStart.minute);
+        const beforeOpen = h < this.marketOpenTime.hour || (h === this.marketOpenTime.hour && m < this.marketOpenTime.minute);
+        return afterStart && beforeOpen;
+    }
+
+    analyzePreMarket(stocks) {
+        if (!stocks || !stocks.length) return [];
+        const gates = this.constructor.QUALITY_GATES;
+        return stocks
+            .filter(s => s.price > 0 && s.volume >= gates.minVolume && Math.abs(s.changePercent || 0) >= 2)
+            .map(s => ({
+                symbol: s.symbol,
+                name: s.name,
+                price: s.price,
+                gapPercent: s.changePercent,
+                volume: s.volume,
+                direction: s.changePercent > 0 ? 'GAP_UP' : 'GAP_DOWN',
+                isBlueChip: this.constructor.BLUE_CHIPS.has(s.symbol)
+            }))
+            .sort((a, b) => Math.abs(b.gapPercent) - Math.abs(a.gapPercent))
+            .slice(0, 20);
+    }
+
+    analyzePreMarketSession(stocks) {
+        const signals = this.analyzePreMarket(stocks);
+        return {
+            isPreMarket: this.isPreOpenWindow(),
+            message: signals.length ? `${signals.length} gap movers detected` : 'No significant gaps yet',
+            signals
+        };
     }
 
     /**

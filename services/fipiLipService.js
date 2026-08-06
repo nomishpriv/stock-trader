@@ -4,28 +4,24 @@ const axios = require('axios');
 
 const BASE_URL = 'https://scstrade.com/FIPILIPI.aspx';
 
-// Cache with longer TTL
+// ─── CACHE & HISTORY ───────────────────────────────────────────────────────
 let cache = {
-    mainSum: null,
-    mainSumDetails: null,
-    fipi: null,
-    lipi: null,
-    fipiSector: null,
-    fipiInvestor: null,
-    ts: 0,
-    fetching: false, // Prevent concurrent fetches
-    lastError: null
+    mainSum: null, mainSumDetails: null,
+    fipi: null, lipi: null,
+    fipiSector: null, fipiInvestor: null,
+    ts: 0, fetching: false, lastError: null,
+    // NEW: Historical snapshots for trend detection
+    history: [] // { date, fipiNet, localNet, sectors: {...} }
 };
-const CACHE_TTL = 600000; // 10 minutes (longer since data updates daily)
-const FETCH_TIMEOUT = 15000; // 15 seconds per request
+const CACHE_TTL = 600000;
+const FETCH_TIMEOUT = 15000;
+const MAX_HISTORY = 30; // Keep 30 trading days
 
 function getDateString(date) {
     const d = date || new Date();
-    // Only fetch on weekdays, use last weekday on weekends
     const day = d.getDay();
-    if (day === 0) d.setDate(d.getDate() - 2); // Sunday -> Friday
-    if (day === 6) d.setDate(d.getDate() - 1); // Saturday -> Friday
-    
+    if (day === 0) d.setDate(d.getDate() - 2);
+    if (day === 6) d.setDate(d.getDate() - 1);
     const mm = String(d.getMonth() + 1).padStart(2, '0');
     const dd = String(d.getDate()).padStart(2, '0');
     const yyyy = d.getFullYear();
@@ -35,35 +31,21 @@ function getDateString(date) {
 async function fetchFromSCS(endpoint, body) {
     try {
         const response = await axios.post(`${BASE_URL}/${endpoint}`, {
-            ...body,
-            _search: false,
-            nd: Date.now(),
-            rows: 1000,
-            page: 1,
-            sidx: '',
-            sord: 'asc'
+            ...body, _search: false, nd: Date.now(),
+            rows: 1000, page: 1, sidx: '', sord: 'asc'
         }, {
             headers: {
                 'Content-Type': 'application/json; charset=utf-8',
                 'Accept': 'application/json, text/javascript, */*; q=0.01',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
                 'X-Requested-With': 'XMLHttpRequest',
                 'Referer': 'https://scstrade.com/FIPILIPI.aspx',
-                'Origin': 'https://scstrade.com',
-                'Cache-Control': 'no-cache',
-                'Pragma': 'no-cache'
+                'Origin': 'https://scstrade.com'
             },
             timeout: FETCH_TIMEOUT,
-            // Don't follow redirects
             maxRedirects: 0,
-            validateStatus: function (status) {
-                return status >= 200 && status < 300;
-            }
+            validateStatus: s => s >= 200 && s < 300
         });
-        
-        // Response is { d: "..." } with JSON string inside
         if (response.data && typeof response.data.d === 'string') {
             return JSON.parse(response.data.d);
         }
@@ -83,90 +65,63 @@ async function fetchFromSCS(endpoint, body) {
 async function fetchAllFipiLipData(dateOverride) {
     const dateStr = getDateString(dateOverride);
     const body = { date1: dateStr, date2: dateStr };
-
     console.log(`📊 Fetching FIPI/LIPI for ${dateStr}...`);
 
-    // Fetch sequentially with delays to avoid rate limiting
     const results = {};
-    
-    // Fetch main summary first
     results.mainSum = await fetchFromSCS('loadmainsum', body);
     if (!results.mainSum) {
         console.log('⚠️ Main sum fetch failed, aborting');
         return null;
     }
-    
-    // Small delay
     await new Promise(r => setTimeout(r, 300));
-    
-    // Fetch details
     results.mainSumDetails = await fetchFromSCS('loadmainsumdetails', body);
-    
     await new Promise(r => setTimeout(r, 300));
-    
-    // Fetch LIPI and FIPI in parallel (they're smaller)
     const [lipi, fipi] = await Promise.all([
         fetchFromSCS('loadlipi', body),
         fetchFromSCS('loadfipi', body)
     ]);
-    results.lipi = lipi;
-    results.fipi = fipi;
-    
+    results.lipi = lipi; results.fipi = fipi;
     await new Promise(r => setTimeout(r, 300));
-    
-    // Fetch sector data
     results.fipiSector = await fetchFromSCS('loadfipisector', body);
-    
     await new Promise(r => setTimeout(r, 300));
-    
-    // Fetch investor data
     results.fipiInvestor = await fetchFromSCS('loadfipiInvestor', body);
-    
     results.date = dateStr;
-    
+
     const successCount = Object.values(results).filter(v => v !== null && typeof v !== 'string').length;
     console.log(`📊 FIPI/LIPI fetch complete: ${successCount}/6 endpoints succeeded`);
-    
     return results;
 }
 
 // ─── PROCESS DATA ──────────────────────────────────────────────────────────
 
 function processSectorData(rawData) {
-    if (!rawData?.fipiSector) return { sectors: [], summary: {}, totals: { totalFipiNet: 0, totalLocalNet: 0, totalNetValue: 0 } };
-
+    if (!rawData?.fipiSector) {
+        return { sectors: [], summary: {}, totals: { totalFipiNet: 0, totalLocalNet: 0, totalNetValue: 0 } };
+    }
     const { fipiSector, mainSum, mainSumDetails } = rawData;
-    
     const sectorMap = new Map();
-    
+
     (fipiSector || []).forEach(item => {
         const sectorName = (item.FLSectorName || '').replace(' (mn$)', '');
         if (!sectorMap.has(sectorName)) {
             sectorMap.set(sectorName, {
                 name: sectorName,
-                totalBuyVol: 0,
-                totalSellVol: 0,
-                netValueUSD: 0,
-                fipiNet: 0,
-                localNet: 0,
+                totalBuyVol: 0, totalSellVol: 0,
+                netValueUSD: 0, fipiNet: 0, localNet: 0,
                 investors: {}
             });
         }
-        
         const sector = sectorMap.get(sectorName);
         const type = item.FLTypeNew || 'UNKNOWN';
         const netVal = item.FLNetValueUSD || 0;
-        
         sector.totalBuyVol += (item.FLBuyVolume || 0);
         sector.totalSellVol += Math.abs(item.FLSellVolume || 0);
         sector.netValueUSD += netVal;
-        
         if (type === 'FIPI' || type.includes('FOREIGN') || type.includes('OVERSEAS')) {
             sector.fipiNet += netVal;
         } else {
             sector.localNet += netVal;
         }
-        
         sector.investors[type] = {
             buyVol: item.FLBuyVolume || 0,
             sellVol: Math.abs(item.FLSellVolume || 0),
@@ -195,46 +150,117 @@ function processSectorData(rawData) {
     };
 }
 
+// NEW: Calculate flow momentum (3-day trend)
+function calculateFlowMomentum(history, current) {
+    if (!history || history.length < 2) return { fipiTrend: 'FLAT', localTrend: 'FLAT', acceleration: 0 };
+
+    const recent = history.slice(-5); // Last 5 snapshots
+    const fipiValues = recent.map(h => h.fipiNet);
+    const localValues = recent.map(h => h.localNet);
+
+    // Simple linear trend
+    const fipiSlope = fipiValues.length > 1 ? 
+        (fipiValues[fipiValues.length - 1] - fipiValues[0]) / fipiValues.length : 0;
+    const localSlope = localValues.length > 1 ? 
+        (localValues[localValues.length - 1] - localValues[0]) / localValues.length : 0;
+
+    const fipiTrend = fipiSlope > 0.3 ? 'RISING' : fipiSlope < -0.3 ? 'FALLING' : 'FLAT';
+    const localTrend = localSlope > 0.3 ? 'RISING' : localSlope < -0.3 ? 'FALLING' : 'FLAT';
+
+    // Acceleration = today's change vs average change
+    const avgDailyChange = fipiValues.length > 1 ? 
+        fipiValues.slice(1).reduce((sum, val, i) => sum + (val - fipiValues[i]), 0) / (fipiValues.length - 1) : 0;
+    const todayChange = fipiValues.length > 0 ? fipiValues[fipiValues.length - 1] - (fipiValues[fipiValues.length - 2] || 0) : 0;
+    const acceleration = avgDailyChange !== 0 ? (todayChange - avgDailyChange) / Math.abs(avgDailyChange || 1) : 0;
+
+    return { fipiTrend, localTrend, acceleration: parseFloat(acceleration.toFixed(2)) };
+}
+
+// NEW: Detect divergences between price and smart money
+function detectDivergences(sectors, stockDataMap) {
+    const divergences = [];
+    sectors.forEach(sector => {
+        // Find representative stock for sector
+        const stock = stockDataMap?.[sector.name]?.[0];
+        if (!stock) return;
+
+        const priceChange = stock.changePercent || 0;
+        const fipiFlow = sector.fipiNet || 0;
+
+        // Bearish divergence: Price up, FIPI selling
+        if (priceChange > 1.5 && fipiFlow < -0.3) {
+            divergences.push({
+                sector: sector.name,
+                type: 'BEARISH',
+                signal: 'DISTRIBUTION',
+                message: `⚠️ ${sector.name}: Price +${priceChange.toFixed(1)}% but FIPI selling (-$${Math.abs(fipiFlow).toFixed(2)}M). Smart money distributing.`,
+                strength: Math.min(5, Math.abs(priceChange) + Math.abs(fipiFlow))
+            });
+        }
+        // Bullish divergence: Price down, FIPI buying
+        else if (priceChange < -1.5 && fipiFlow > 0.3) {
+            divergences.push({
+                sector: sector.name,
+                type: 'BULLISH',
+                signal: 'ACCUMULATION',
+                message: `💎 ${sector.name}: Price ${priceChange.toFixed(1)}% but FIPI buying (+$${fipiFlow.toFixed(2)}M). Smart money accumulating.`,
+                strength: Math.min(5, Math.abs(priceChange) + Math.abs(fipiFlow))
+            });
+        }
+    });
+    return divergences.sort((a, b) => b.strength - a.strength);
+}
+
 // ─── MAIN EXPORT ────────────────────────────────────────────────────────────
 
-async function getFipiLipData({ date, forceRefresh = false } = {}) {
+async function getFipiLipData({ date, forceRefresh = false, stockData = null } = {}) {
     const now = Date.now();
-    
-    // Return cached data if valid
+
     if (!forceRefresh && !date && cache.mainSum && (now - cache.ts) < CACHE_TTL) {
         console.log('📊 Using cached FIPI/LIPI data (age:', Math.round((now - cache.ts)/1000), 's)');
+        const processed = processSectorData(cache);
+        const momentum = calculateFlowMomentum(cache.history, processed.totals);
+        const divergences = stockData ? detectDivergences(processed.sectors, stockData) : [];
         return {
-            sectorAnalysis: processSectorData(cache),
+            sectorAnalysis: processed,
+            flowMomentum: momentum,
+            divergences,
+            history: cache.history,
             date: cache.date,
             cached: true
         };
     }
-    
-    // Prevent concurrent fetches
+
     if (cache.fetching) {
         console.log('📊 FIPI/LIPI fetch already in progress, returning cached');
         if (cache.mainSum) {
+            const processed = processSectorData(cache);
             return {
-                sectorAnalysis: processSectorData(cache),
+                sectorAnalysis: processed,
+                flowMomentum: calculateFlowMomentum(cache.history, processed.totals),
+                divergences: stockData ? detectDivergences(processed.sectors, stockData) : [],
+                history: cache.history,
                 date: cache.date,
                 cached: true
             };
         }
         return null;
     }
-    
+
     cache.fetching = true;
-    
+
     try {
         const rawData = await fetchAllFipiLipData(date);
-        
+
         if (!rawData || !rawData.mainSum) {
-            console.log('⚠️ No FIPI/LIPI data available');
             cache.fetching = false;
-            // Return cached data even if expired
             if (cache.mainSum) {
+                const processed = processSectorData(cache);
                 return {
-                    sectorAnalysis: processSectorData(cache),
+                    sectorAnalysis: processed,
+                    flowMomentum: calculateFlowMomentum(cache.history, processed.totals),
+                    divergences: stockData ? detectDivergences(processed.sectors, stockData) : [],
+                    history: cache.history,
                     date: cache.date,
                     cached: true,
                     stale: true
@@ -242,22 +268,50 @@ async function getFipiLipData({ date, forceRefresh = false } = {}) {
             }
             return null;
         }
-        
-        cache = { ...rawData, ts: now, fetching: false };
-        
+
+        // NEW: Add to history
+        const processed = processSectorData(rawData);
+        const snapshot = {
+            date: rawData.date,
+            fipiNet: processed.totals.totalFipiNet,
+            localNet: processed.totals.totalLocalNet,
+            totalNet: processed.totals.totalNetValue,
+            sectors: processed.sectors.reduce((map, s) => {
+                map[s.name] = { fipiNet: s.fipiNet, localNet: s.localNet, netValue: s.netValueUSD };
+                return map;
+            }, {})
+        };
+
+        // Avoid duplicates
+        const existingIdx = cache.history.findIndex(h => h.date === rawData.date);
+        if (existingIdx >= 0) cache.history[existingIdx] = snapshot;
+        else cache.history.push(snapshot);
+
+        if (cache.history.length > MAX_HISTORY) cache.history.shift();
+
+        cache = { ...rawData, history: cache.history, ts: now, fetching: false };
+
+        const momentum = calculateFlowMomentum(cache.history, processed.totals);
+        const divergences = stockData ? detectDivergences(processed.sectors, stockData) : [];
+
         return {
-            sectorAnalysis: processSectorData(rawData),
+            sectorAnalysis: processed,
+            flowMomentum: momentum,
+            divergences,
+            history: cache.history,
             date: rawData.date,
             cached: false
         };
     } catch (e) {
         console.error('❌ FIPI/LIPI fetch failed:', e.message);
         cache.fetching = false;
-        
-        // Return stale cache if available
         if (cache.mainSum) {
+            const processed = processSectorData(cache);
             return {
-                sectorAnalysis: processSectorData(cache),
+                sectorAnalysis: processed,
+                flowMomentum: calculateFlowMomentum(cache.history, processed.totals),
+                divergences: stockData ? detectDivergences(processed.sectors, stockData) : [],
+                history: cache.history,
                 date: cache.date,
                 cached: true,
                 stale: true
@@ -267,22 +321,18 @@ async function getFipiLipData({ date, forceRefresh = false } = {}) {
     }
 }
 
-// Get weekly trend - simplified to avoid too many requests
+// Get weekly trend with history context
 async function getWeeklyTrend() {
-    // Only try last 3 trading days to reduce requests
     const results = [];
     let attempts = 0;
-    const maxAttempts = 3;
-    
-    for (let i = 0; i < 7 && attempts < maxAttempts; i++) {
+    const maxAttempts = 5;
+
+    for (let i = 0; i < 10 && attempts < maxAttempts; i++) {
         const d = new Date();
         d.setDate(d.getDate() - i);
-        
-        // Skip weekends
         if (d.getDay() === 0 || d.getDay() === 6) continue;
-        
         attempts++;
-        
+
         try {
             const rawData = await fetchAllFipiLipData(d);
             if (rawData?.mainSum) {
@@ -293,20 +343,20 @@ async function getWeeklyTrend() {
                     localNet: processed.totals.totalLocalNet,
                     totalNet: processed.totals.totalNetValue,
                     topSectors: processed.topGainingSectors.slice(0, 3).map(s => ({
-                        name: s.name,
-                        net: s.netValueUSD
+                        name: s.name, net: s.netValueUSD
+                    })),
+                    bottomSectors: processed.topLosingSectors.slice(0, 3).map(s => ({
+                        name: s.name, net: s.netValueUSD
                     }))
                 });
             }
         } catch (e) {
             console.error(`Error fetching data for ${d.toDateString()}:`, e.message);
         }
-        
-        // Longer delay between requests
         await new Promise(r => setTimeout(r, 2000));
     }
-    
+
     return results.reverse();
 }
 
-module.exports = { getFipiLipData, getWeeklyTrend };
+module.exports = { getFipiLipData, getWeeklyTrend, calculateFlowMomentum, detectDivergences };
