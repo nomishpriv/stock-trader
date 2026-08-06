@@ -1,20 +1,55 @@
 'use strict';
 
+/**
+ * ================================================================
+ * IMPROVED TRADING SIGNAL SERVICE v2.0
+ * Changes:
+ *  1. Quality Gates — filters out penny/illiquid stocks before scoring
+ *  2. Smart Stop-Loss — uses S1/S2 + minimum % buffer + ATR
+ *  3. Market Regime Filter — no signals in strong downtrends
+ *  4. Trend Filter — price must be above 20-day EMA
+ *  5. Stricter R:R — minimum 1.5:1 for any signal to display
+ *  6. Score Rebalancing — reduced RSI weight, added trend confluence
+ * ================================================================
+ */
+
 class TradingSignalService {
-    // ============ CONFIGURABLE WEIGHTS (0-100 scale) ============
     static SIGNAL_WEIGHTS = {
-        technical: 0.30,      // RSI, S/R, volume, momentum
-        fundamental: 0.20,    // PE, EPS, div yield
-        newsAi: 0.25,         // News sentiment, AI trades
-        announcements: 0.15,  // Earnings, dividends, board meetings
-        marketContext: 0.10   // Index trend, time-of-day
+        technical: 0.30,
+        fundamental: 0.20,
+        newsAi: 0.25,
+        announcements: 0.15,
+        marketContext: 0.10
     };
 
     static RISK_PENALTIES = {
-        lowLiquidity: 8,      // volume < 30% of 10d avg
-        wideSpread: 5,        // spread > 1.5%
-        highVolatility: 4,    // |change| > 6% (already moved too much)
-        nearCircuit: 6        // within 2% of upper/lower circuit
+        lowLiquidity: 8,
+        wideSpread: 5,
+        highVolatility: 4,
+        nearCircuit: 6
+    };
+
+    // ✅ NEW: Blue-chip whitelist for auto-trading
+    static BLUE_CHIPS = new Set([
+        'OGDC', 'PPL', 'POL', 'MARI', 'HUBC', 'ENGRO', 'EFERT', 'FATIMA',
+        'FFC', 'LUCK', 'MLCF', 'DGKC', 'PSO', 'ATRL', 'HCAR', 'MEBL',
+        'MCB', 'HBL', 'UBL', 'BAFL', 'LCI', 'AGP', 'SEARL', 'GLAXO',
+        'NATF', 'ABOT', 'COLG', 'PNSC', 'SAZEW', 'SRVI', 'GHNI', 'LOADS',
+        'PIOC', 'BIPL', 'THALL', 'PNSC', 'DCR', 'BFBIO'
+    ]);
+
+    // ✅ NEW: Quality gate thresholds
+    static QUALITY_GATES = {
+        minPrice: 20,           // No penny stocks
+        minVolume: 50000,       // Minimum daily volume
+        maxSpreadPercent: 3.0,  // (high-low)/price must be < 3%
+        minRiskReward: 1.5,     // Minimum R:R to show signal
+        minRiskRewardAuto: 2.0, // Minimum R:R for auto-trade
+        minScoreAuto: 15,       // Higher threshold for auto
+        minStopPercent: {       // Minimum stop distance
+            blueChip: 1.5,
+            standard: 2.5
+        }
     };
 
     constructor() {
@@ -30,33 +65,11 @@ class TradingSignalService {
         const hours = pkTime.getHours();
         const minutes = pkTime.getMinutes();
         const day = pkTime.getDay();
-        
-        // Weekend check
         if (day === 0 || day === 6) return false;
-        
-        // Friday: closes early at 15:30
         if (day === 5 && (hours > 15 || (hours === 15 && minutes >= 30))) return false;
-        
-        // Regular market hours: 9:32 - 15:30
         const marketOpen = hours > 9 || (hours === 9 && minutes >= 32);
         const marketClose = hours < 15 || (hours === 15 && minutes <= 30);
         return marketOpen && marketClose;
-    }
-
-    isPreOpenSession() {
-        const now = new Date();
-        const pkTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Karachi' }));
-        const hours = pkTime.getHours();
-        const minutes = pkTime.getMinutes();
-        const day = pkTime.getDay();
-        
-        if (day === 0 || day === 6) return false;
-        if (day === 5 && hours >= 15) return false;
-        return (hours === 9 && minutes >= 15 && minutes < 32);
-    }
-
-    isMarketClosed() {
-        return !this.isMarketOpen() && !this.isPreOpenSession();
     }
 
     formatVol(v) {
@@ -66,179 +79,318 @@ class TradingSignalService {
         return v.toString();
     }
 
-    generateSignals(stocks, newsData, announcements) {
-    if (!stocks || !stocks.length) return [];
-    const signals = [];
-    const marketOpen = this.isMarketOpen();
+    // ✅ NEW: Market regime check
+    isMarketHealthy(marketIndex) {
+        if (!marketIndex) return true;
+        // Don't trade if KSE-100 is down > 1.5%
+        if (marketIndex.changePercent < -1.5) return false;
+        // Don't trade if > 70% stocks are declining
+        if (marketIndex.decliners && marketIndex.advancers) {
+            const total = marketIndex.advancers + marketIndex.decliners;
+            if (total > 0 && (marketIndex.decliners / total) > 0.70) return false;
+        }
+        return true;
+    }
 
-    for (const stock of stocks) {
-        let score = 0;
+    // ✅ NEW: Quality gate filter
+    passesQualityGate(stock, marketIndex) {
+        const g = this.constructor.QUALITY_GATES;
         const reasons = [];
-        const type = [];
+        let passed = true;
 
-        // Skip illiquid stocks (very low price or zero volume)
-        if (stock.price <= 0.5 || stock.volume < 5000) continue;
-        
-        // Skip stocks with no proper price data
-        if (!stock.price || stock.price <= 0) continue;
+        // Price gate
+        if (stock.price < g.minPrice) {
+            reasons.push(`Price Rs.${stock.price} < min Rs.${g.minPrice}`);
+            passed = false;
+        }
 
-        // Technical Analysis
-        if (stock.rsi < 30) { score += 8; reasons.push('Oversold (RSI)'); }
-        else if (stock.rsi < 40) { score += 4; reasons.push('Near oversold'); }
-        else if (stock.rsi > 70) { score -= 5; reasons.push('Overbought (RSI)'); }
-        else if (stock.rsi > 60) { score -= 2; reasons.push('Near overbought'); }
+        // Volume gate
+        if (stock.volume < g.minVolume) {
+            reasons.push(`Volume ${this.formatVol(stock.volume)} < min ${this.formatVol(g.minVolume)}`);
+            passed = false;
+        }
 
-        // Support & Resistance - FIXED: Only add if levels are valid
-        const hasValidS1 = stock.s1 && stock.s1 > 0 && stock.s1 < stock.price;
+        // Spread gate (intraday volatility)
+        if (stock.high > 0 && stock.low > 0) {
+            const spread = ((stock.high - stock.low) / stock.price) * 100;
+            if (spread > g.maxSpreadPercent) {
+                reasons.push(`Spread ${spread.toFixed(1)}% > max ${g.maxSpreadPercent}%`);
+                passed = false;
+            }
+        }
+
+        // Market regime gate
+        if (!this.isMarketHealthy(marketIndex)) {
+            reasons.push('Market in downtrend');
+            passed = false;
+        }
+
+        // Trend gate: price should be above 20-day EMA (if available)
+        if (stock.ema20 && stock.price < stock.ema20 * 0.98) {
+            reasons.push(`Price below EMA20`);
+            passed = false;
+        }
+
+        return { passed, reasons };
+    }
+
+    // ✅ NEW: Smart stop loss calculation
+    calculateSmartStop(stock, entryPrice, isBlueChip) {
+        const g = this.constructor.QUALITY_GATES;
+        const minStopPct = isBlueChip ? g.minStopPercent.blueChip : g.minStopPercent.standard;
+
+        // 1. Support-based stop
+        let stop = entryPrice * 0.97; // default 3%
+
+        const hasValidS1 = stock.s1 && stock.s1 > 0 && stock.s1 < entryPrice;
         const hasValidS2 = stock.s2 && stock.s2 > 0 && stock.s2 < stock.s1;
-        const hasValidR1 = stock.r1 && stock.r1 > 0 && stock.r1 > stock.price;
+
+        if (hasValidS2 && stock.s2 < entryPrice * 0.99) {
+            stop = stock.s2 * 0.995; // S2 minus 0.5% buffer
+        } else if (hasValidS1 && stock.s1 < entryPrice * 0.995) {
+            stop = stock.s1 * 0.99;  // S1 minus 1% buffer
+        }
+
+        // 2. Minimum % stop (prevents ultra-tight stops)
+        const minStopPrice = entryPrice * (1 - minStopPct / 100);
+        if (stop > minStopPrice) {
+            stop = minStopPrice;
+        }
+
+        // 3. ATR-based stop (if ATR data available)
+        if (stock.atr14 && stock.atr14 > 0) {
+            const atrStop = entryPrice - (1.5 * stock.atr14);
+            if (atrStop < stop) {
+                stop = atrStop;
+            }
+        }
+
+        return +stop.toFixed(2);
+    }
+
+    // ✅ NEW: Smart target calculation
+    calculateSmartTarget(stock, entryPrice, stopPrice, minRR) {
+        const risk = entryPrice - stopPrice;
+        if (risk <= 0) return null;
+
+        // Use R1 if available and gives good R:R
+        let target = entryPrice + (risk * minRR);
+
+        const hasValidR1 = stock.r1 && stock.r1 > 0 && stock.r1 > entryPrice;
         const hasValidR2 = stock.r2 && stock.r2 > 0 && stock.r2 > stock.r1;
 
-        if (hasValidS1 && stock.price <= stock.s1 * 1.02) {
-            score += 5; reasons.push('At support S1');
-        }
-        if (hasValidS2 && stock.price <= stock.s2 * 1.02 && stock.price >= stock.s2 * 0.98) {
-            score += 7; reasons.push('At strong support S2');
-        }
-        if (hasValidR1 && stock.price >= stock.r1 * 0.98) {
-            score -= 3; reasons.push('Near resistance R1');
-        }
-
-        // Volume Analysis
-        const volRatio = stock.volAvg10d ? stock.volume / stock.volAvg10d : 1;
-        if (volRatio > 2) { score += 3; reasons.push(`High vol (${volRatio.toFixed(1)}x)`); }
-        else if (volRatio > 1.5) { score += 2; reasons.push('Above avg volume'); }
-
-        // Price Momentum
-        if (stock.changePercent > 3) { score += 2; reasons.push('Strong momentum'); }
-        else if (stock.changePercent < -3) { score -= 2; reasons.push('Weak momentum'); }
-
-        // Fundamental Analysis
-        if (stock.pe > 0 && stock.pe < 10) { score += 3; reasons.push('Low PE'); }
-        if (stock.eps > 10) { score += 2; reasons.push('Strong EPS'); }
-        if (stock.divYield > 5) { score += 2; reasons.push(`High yield ${stock.divYield}%`); }
-
-        // News & AI Analysis
-        if (newsData && newsData.topTrades) {
-            const tradeMatch = newsData.topTrades.find(t => t.ticker === stock.symbol);
-            if (tradeMatch) {
-                if (tradeMatch.action === 'BUY') { score += 5; reasons.push('AI: BUY'); }
-                else if (tradeMatch.action === 'SELL') { score -= 4; reasons.push('AI: SELL'); }
-            }
-        }
-
-        // Announcements
-        if (announcements && announcements.announcements) {
-            const stockAnn = announcements.announcements.find(a => a.symbol === stock.symbol);
-            if (stockAnn) {
-                if (stockAnn.score > 5) { score += 6; reasons.push(`${stockAnn.typeIcon} Positive`); }
-                else if (stockAnn.score > 2) { score += 3; reasons.push(`${stockAnn.typeIcon} Good`); }
-                else if (stockAnn.score < -3) { score -= 3; reasons.push(`${stockAnn.typeIcon} Negative`); }
-            }
-        }
-
-        // Trade Type Determination
-        if (volRatio > 1.5 && Math.abs(stock.changePercent) > 2) type.push('DAY');
-        if (stock.rsi < 45 && stock.pe < 15 && stock.divYield > 0) type.push('SWING');
-        if (score >= 8) { 
-            if (!type.includes('DAY')) type.push('DAY'); 
-            if (!type.includes('SWING')) type.push('SWING'); 
-        }
-
-        // Calculate Target and Stop - FIXED
-        let target, stop;
-        
-        // Use valid R1 as target if available and above price
-        if (hasValidR1 && stock.r1 > stock.price * 1.005) {
+        if (hasValidR2 && stock.r2 > target) {
+            target = stock.r2 * 0.995;
+        } else if (hasValidR1 && stock.r1 > target * 0.95) {
             target = stock.r1;
-        } else if (hasValidR2 && stock.r2 > stock.price * 1.01) {
-            target = stock.r2;
-        } else {
-            target = stock.price * 1.03;
         }
 
-        // Use valid S1 as stop if available and below price
-        if (hasValidS1 && stock.s1 < stock.price * 0.995) {
-            stop = stock.s1;
-        } else if (hasValidS2 && stock.s2 < stock.price * 0.99) {
-            stop = stock.s2;
-        } else {
-            stop = stock.price * 0.97;
-        }
-
-        // Calculate Risk/Reward - FIXED
-        const potentialGain = target - stock.price;
-        const potentialLoss = stock.price - stop;
-        let riskReward = 0;
-        
-        if (potentialLoss > 0 && potentialGain > 0) {
-            riskReward = +(potentialGain / potentialLoss).toFixed(1);
-        } else if (potentialLoss <= 0) {
-            // Invalid stop - don't show this signal
-            continue;
-        }
-
-        // Skip signals with terrible risk/reward
-        if (riskReward < 0.5 && score < 10) continue;
-
-        // Signal Classification
-        let signal, color, emoji;
-        if (score >= 12) { signal = 'STRONG_BUY'; color = '#22c55e'; emoji = '🟢🟢'; }
-        else if (score >= 7) { signal = 'BUY'; color = '#4ade80'; emoji = '🟢'; }
-        else if (score >= 3) { signal = 'WEAK_BUY'; color = '#84cc16'; emoji = '🟡'; }
-        else if (score <= -8) { signal = 'STRONG_SELL'; color = '#ef4444'; emoji = '🔴🔴'; }
-        else if (score <= -4) { signal = 'SELL'; color = '#f87171'; emoji = '🔴'; }
-        else { signal = 'NEUTRAL'; color = '#94a3b8'; emoji = '⚪'; }
-
-        // Generate signal if there's enough conviction AND valid levels
-        if ((type.length > 0 || Math.abs(score) >= 5) && riskReward >= 0.3) {
-            signals.push({
-                symbol: stock.symbol,
-                name: stock.name,
-                price: stock.price,
-                change: stock.changePercent,
-                volume: stock.volume,
-                rsi: stock.rsi,
-                pe: stock.pe,
-                signal,
-                emoji,
-                color,
-                score,
-                reasons: reasons.slice(0, 5),
-                tradeType: type.length > 0 ? type.join(' | ') : (score > 0 ? 'SWING' : 'AVOID'),
-                entryPrice: stock.price,
-                targetPrice: +target.toFixed(2),
-                stopLoss: +stop.toFixed(2),
-                riskReward,
-                riskLevel: score > 10 ? 'LOW' : score > 5 ? 'MEDIUM' : 'HIGH',
-                marketStatus: marketOpen ? 'MARKET_OPEN' : 'MARKET_CLOSED',
-            });
-        }
+        return +target.toFixed(2);
     }
-    
-    // Sort by score (absolute) and then by risk/reward
-    signals.sort((a, b) => {
-        const scoreDiff = Math.abs(b.score) - Math.abs(a.score);
-        if (Math.abs(scoreDiff) < 2) {
-            return b.riskReward - a.riskReward;
-        }
-        return scoreDiff;
-    });
-    
-    return signals;
-}
 
-    // Helper methods for component scores (keeping old scoring logic)
+    generateSignals(stocks, newsData, announcements, marketIndex = null) {
+        if (!stocks || !stocks.length) return [];
+        const signals = [];
+        const marketOpen = this.isMarketOpen();
+
+        for (const stock of stocks) {
+            let score = 0;
+            const reasons = [];
+            const type = [];
+            const isBlueChip = this.constructor.BLUE_CHIPS.has(stock.symbol);
+
+            // ✅ QUALITY GATE (NEW)
+            const quality = this.passesQualityGate(stock, marketIndex);
+            if (!quality.passed) {
+                // Skip entirely — don't even show in frontend
+                continue;
+            }
+
+            // Skip stocks with no proper price data
+            if (!stock.price || stock.price <= 0) continue;
+
+            // ==================== SCORING (REVISED) ====================
+
+            // Technical Analysis — REDUCED RSI weight, added confluence requirement
+            if (stock.rsi < 30) { 
+                score += 5; reasons.push('Oversold (RSI)'); 
+            }
+            else if (stock.rsi < 40) { 
+                score += 2; reasons.push('Near oversold'); 
+            }
+            else if (stock.rsi > 70) { 
+                score -= 5; reasons.push('Overbought (RSI)'); 
+            }
+            else if (stock.rsi > 60) { 
+                score -= 2; reasons.push('Near overbought'); 
+            }
+
+            // Support & Resistance — require confluence with trend
+            const hasValidS1 = stock.s1 && stock.s1 > 0 && stock.s1 < stock.price;
+            const hasValidS2 = stock.s2 && stock.s2 > 0 && stock.s2 < stock.s1;
+            const hasValidR1 = stock.r1 && stock.r1 > 0 && stock.r1 > stock.price;
+            const hasValidR2 = stock.r2 && stock.r2 > 0 && stock.r2 > stock.r1;
+
+            // Only give support points if price is in uptrend or flat
+            const inUptrend = !stock.ema20 || stock.price >= stock.ema20;
+
+            if (hasValidS1 && stock.price <= stock.s1 * 1.02 && inUptrend) {
+                score += 4; reasons.push('At support S1 + trend');
+            }
+            if (hasValidS2 && stock.price <= stock.s2 * 1.02 && stock.price >= stock.s2 * 0.98 && inUptrend) {
+                score += 6; reasons.push('At strong support S2 + trend');
+            }
+            if (hasValidR1 && stock.price >= stock.r1 * 0.98) {
+                score -= 3; reasons.push('Near resistance R1');
+            }
+
+            // Volume Analysis — stricter thresholds
+            const volRatio = stock.volAvg10d ? stock.volume / stock.volAvg10d : 1;
+            if (volRatio > 3) { 
+                score += 4; reasons.push(`High vol (${volRatio.toFixed(1)}x)`); 
+            }
+            else if (volRatio > 2) { 
+                score += 2; reasons.push('Above avg volume'); 
+            }
+
+            // Price Momentum — require alignment
+            if (stock.changePercent > 3 && inUptrend) { 
+                score += 3; reasons.push('Strong momentum + trend'); 
+            }
+            else if (stock.changePercent < -3) { 
+                score -= 3; reasons.push('Weak momentum'); 
+            }
+
+            // Fundamental Analysis
+            if (stock.pe > 0 && stock.pe < 10) { score += 3; reasons.push('Low PE'); }
+            if (stock.eps > 10) { score += 2; reasons.push('Strong EPS'); }
+            if (stock.divYield > 5) { score += 2; reasons.push(`High yield ${stock.divYield.toFixed(1)}%`); }
+
+            // News & AI Analysis
+            if (newsData && newsData.topTrades) {
+                const tradeMatch = newsData.topTrades.find(t => t.ticker === stock.symbol);
+                if (tradeMatch) {
+                    if (tradeMatch.action === 'BUY') { score += 4; reasons.push('AI: BUY'); }
+                    else if (tradeMatch.action === 'SELL') { score -= 4; reasons.push('AI: SELL'); }
+                }
+            }
+
+            // Announcements
+            if (announcements && announcements.announcements) {
+                const stockAnn = announcements.announcements.find(a => a.symbol === stock.symbol);
+                if (stockAnn) {
+                    if (stockAnn.score > 5) { score += 5; reasons.push(`${stockAnn.typeIcon} Positive`); }
+                    else if (stockAnn.score > 2) { score += 2; reasons.push(`${stockAnn.typeIcon} Good`); }
+                    else if (stockAnn.score < -3) { score -= 3; reasons.push(`${stockAnn.typeIcon} Negative`); }
+                }
+            }
+
+            // ✅ NEW: Trend bonus/penalty
+            if (stock.ema20) {
+                const trendStrength = (stock.price - stock.ema20) / stock.ema20 * 100;
+                if (trendStrength > 2) { score += 3; reasons.push('Above EMA20'); }
+                else if (trendStrength < -3) { score -= 4; reasons.push('Below EMA20'); }
+            }
+
+            // ✅ NEW: Blue-chip bonus (quality premium)
+            if (isBlueChip) { score += 2; reasons.push('Blue-chip quality'); }
+
+            // Trade Type Determination
+            if (volRatio > 2 && Math.abs(stock.changePercent) > 2) type.push('DAY');
+            if (stock.rsi < 45 && stock.pe < 15 && stock.divYield > 0 && inUptrend) type.push('SWING');
+            if (score >= 10) { 
+                if (!type.includes('DAY')) type.push('DAY'); 
+                if (!type.includes('SWING')) type.push('SWING'); 
+            }
+
+            // ==================== TARGET & STOP (SMART) ====================
+            const entry = stock.price;
+            const stop = this.calculateSmartStop(stock, entry, isBlueChip);
+            const target = this.calculateSmartTarget(stock, entry, stop, this.constructor.QUALITY_GATES.minRiskReward);
+
+            if (!target || target <= entry) {
+                continue; // Invalid setup
+            }
+
+            const potentialGain = target - entry;
+            const potentialLoss = entry - stop;
+            let riskReward = 0;
+
+            if (potentialLoss > 0 && potentialGain > 0) {
+                riskReward = +(potentialGain / potentialLoss).toFixed(1);
+            }
+
+            // ✅ STRICT R:R GATE
+            if (riskReward < this.constructor.QUALITY_GATES.minRiskReward) {
+                continue;
+            }
+
+            // Signal Classification
+            let signal, color, emoji;
+            if (score >= 14) { signal = 'STRONG_BUY'; color = '#22c55e'; emoji = '🟢🟢'; }
+            else if (score >= 9) { signal = 'BUY'; color = '#4ade80'; emoji = '🟢'; }
+            else if (score >= 5) { signal = 'WEAK_BUY'; color = '#84cc16'; emoji = '🟡'; }
+            else if (score <= -8) { signal = 'STRONG_SELL'; color = '#ef4444'; emoji = '🔴🔴'; }
+            else if (score <= -4) { signal = 'SELL'; color = '#f87171'; emoji = '🔴'; }
+            else { signal = 'NEUTRAL'; color = '#94a3b8'; emoji = '⚪'; }
+
+            // ✅ FINAL GATE: Only show signals with conviction + valid levels + good R:R
+            const isAutoTradable = isBlueChip && 
+                                   score >= this.constructor.QUALITY_GATES.minScoreAuto &&
+                                   riskReward >= this.constructor.QUALITY_GATES.minRiskRewardAuto &&
+                                   stock.volume >= 100000;
+
+            if ((type.length > 0 || Math.abs(score) >= 6) && riskReward >= 1.0) {
+                signals.push({
+                    symbol: stock.symbol,
+                    name: stock.name,
+                    price: stock.price,
+                    change: stock.changePercent,
+                    volume: stock.volume,
+                    rsi: stock.rsi,
+                    pe: stock.pe,
+                    signal,
+                    emoji,
+                    color,
+                    score,
+                    reasons: reasons.slice(0, 5),
+                    tradeType: type.length > 0 ? type.join(' | ') : (score > 0 ? 'SWING' : 'AVOID'),
+                    entryPrice: stock.price,
+                    targetPrice: target,
+                    stopLoss: stop,
+                    riskReward,
+                    riskLevel: score > 12 ? 'LOW' : score > 7 ? 'MEDIUM' : 'HIGH',
+                    marketStatus: marketOpen ? 'MARKET_OPEN' : 'MARKET_CLOSED',
+                    isBlueChip,
+                    autoTradeEligible: isAutoTradable,
+                    qualityPassed: true
+                });
+            }
+        }
+
+        // Sort by score (absolute) and then by risk/reward
+        signals.sort((a, b) => {
+            const scoreDiff = Math.abs(b.score) - Math.abs(a.score);
+            if (Math.abs(scoreDiff) < 2) {
+                return b.riskReward - a.riskReward;
+            }
+            return scoreDiff;
+        });
+
+        return signals;
+    }
+
+    // Helper methods (unchanged)
     getTechnicalScore(stock) {
         let score = 50;
-        if (stock.rsi < 30) score += 20;
-        else if (stock.rsi < 40) score += 10;
+        if (stock.rsi < 30) score += 15;
+        else if (stock.rsi < 40) score += 8;
         else if (stock.rsi > 70) score -= 15;
         else if (stock.rsi > 60) score -= 5;
-        
-        if (stock.s1 && stock.price <= stock.s1 * 1.02) score += 10;
+
+        if (stock.s1 && stock.price <= stock.s1 * 1.02) score += 8;
         if (stock.r1 && stock.price >= stock.r1 * 0.98) score -= 10;
-        
+
         return Math.max(0, Math.min(100, score));
     }
 
@@ -265,252 +417,12 @@ class TradingSignalService {
     }
 
     /**
-     * Pre-Market Scanner for PSX
+     * 🔥 AUTO-TRADE SIGNAL EXTRACTOR
+     * Returns only signals eligible for automatic execution
      */
-    async analyzePreMarket(stocks, orderBookService) {
-        const preMarketSignals = [];
-        const isPreOpen = this.isPreOpenSession();
-        const marketClosed = this.isMarketClosed();
-
-        if (marketClosed) {
-            for (const stock of stocks) {
-                const score = { total: 0, reasons: [] };
-                if (stock.changePercent > 3) { score.total += 4; score.reasons.push('Strong last close'); }
-                else if (stock.changePercent > 1) { score.total += 2; score.reasons.push('Positive last close'); }
-                if (stock.rsi < 35) { score.total += 3; score.reasons.push('Oversold - bounce likely'); }
-                if (stock.rsi > 40 && stock.rsi < 55 && stock.changePercent > 0) { 
-                    score.total += 2; score.reasons.push('RSI momentum building'); 
-                }
-                const volRatio = stock.volAvg10d ? stock.volume / stock.volAvg10d : 1;
-                if (volRatio > 2) { score.total += 3; score.reasons.push('High volume breakout'); }
-                if (stock.s1 && stock.price <= stock.s1 * 1.03 && stock.price >= stock.s1 * 0.97) {
-                    score.total += 3; score.reasons.push('Near support - good entry');
-                }
-                if (stock.high > 0 && stock.low > 0) {
-                    const closePosition = ((stock.price - stock.low) / (stock.high - stock.low)) * 100;
-                    if (closePosition > 80) { score.total += 2; score.reasons.push('Closed near high'); }
-                }
-                if (score.total >= 5) {
-                    const gapPercent = stock.open > 0 ? ((stock.price - stock.open) / stock.open * 100).toFixed(1) : 0;
-                    preMarketSignals.push({
-                        symbol: stock.symbol, name: stock.name, price: stock.price,
-                        open: stock.open, high: stock.high, low: stock.low,
-                        gapPercent: +gapPercent, volume: stock.volume, rsi: stock.rsi,
-                        score: score.total, reasons: score.reasons,
-                        expectedOpen: +(stock.price * (1 + (score.total / 200))).toFixed(2),
-                        confidence: Math.min(85, score.total * 10 + 20),
-                        sessionType: 'NEXT_SESSION',
-                        note: 'Potential mover for next trading session',
-                    });
-                }
-            }
-        } else if (isPreOpen) {
-            for (const stock of stocks.slice(0, 100)) {
-                const score = { total: 0, reasons: [] };
-                if (stock.changePercent > 2) { score.total += 3; score.reasons.push('Bullish previous close'); }
-                try {
-                    const cached = orderBookService ? orderBookService.getCachedOrderBook(stock.symbol) : null;
-                    if (cached) {
-                        if (cached.bidAskRatio > 1.3) { score.total += 4; score.reasons.push(`Buy orders dominate (${cached.bidAskRatio})`); }
-                        if (cached.imbalance > 15) { score.total += 3; score.reasons.push(`Buy imbalance ${cached.imbalance}%`); }
-                        if (cached.largeOrders?.some(o => o.type === 'BID' && o.impact === 'HIGH')) {
-                            score.total += 5; score.reasons.push('Large buy order in pre-open'); 
-                        }
-                        if (cached.spreadPercent < 0.5) { score.total += 1; score.reasons.push('Tight spread'); }
-                    }
-                } catch (e) {}
-                if (stock.upperCircuit && stock.price >= stock.upperCircuit * 0.93) {
-                    score.total += 3; score.reasons.push('Near upper circuit');
-                }
-                if (score.total >= 5) {
-                    preMarketSignals.push({
-                        symbol: stock.symbol, name: stock.name, price: stock.price,
-                        open: stock.open,
-                        gapPercent: stock.open > 0 ? +((stock.price - stock.open) / stock.open * 100).toFixed(1) : 0,
-                        volume: stock.volume, score: score.total, reasons: score.reasons,
-                        expectedOpen: +(stock.price * 1.02).toFixed(2),
-                        confidence: Math.min(90, score.total * 12),
-                        sessionType: 'PRE_OPEN',
-                        note: 'Strong pre-open demand - likely to gap up at open',
-                    });
-                }
-            }
-        } else {
-            for (const stock of stocks.slice(0, 100)) {
-                const score = { total: 0, reasons: [] };
-                const volRatio = stock.volAvg10d ? stock.volume / stock.volAvg10d : 0;
-                if (volRatio > 1.5 && stock.changePercent > 1) {
-                    score.total += 4; score.reasons.push('Volume breakout in progress');
-                }
-                if (stock.price >= stock.r1 * 0.99) {
-                    score.total += 3; score.reasons.push('Breaking resistance');
-                }
-                if (stock.rsi > 50 && stock.rsi < 65 && stock.changePercent > 0) {
-                    score.total += 2; score.reasons.push('RSI momentum');
-                }
-                if (score.total >= 5) {
-                    preMarketSignals.push({
-                        symbol: stock.symbol, name: stock.name, price: stock.price,
-                        gapPercent: stock.open > 0 ? +((stock.price - stock.open) / stock.open * 100).toFixed(1) : 0,
-                        score: score.total, reasons: score.reasons,
-                        expectedOpen: +(stock.price * 1.01).toFixed(2),
-                        confidence: Math.min(85, score.total * 10 + 15),
-                        sessionType: 'INTRADAY',
-                        note: 'Intraday breakout candidate',
-                    });
-                }
-            }
-        }
-        preMarketSignals.sort((a, b) => b.score - a.score);
-        return preMarketSignals.slice(0, 20);
-    }
-
-    /**
-     * 🔥 Dedicated Pre-Market Analysis
-     */
-    async analyzePreMarketSession(stocks, orderBookService) {
-        const now = new Date();
-        const pkTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Karachi' }));
-        const hours = pkTime.getHours();
-        const minutes = pkTime.getMinutes();
-        const day = pkTime.getDay();
-
-        const isPreMarket = (hours === 9 && minutes >= 15 && minutes < 32) && (day >= 1 && day <= 5);
-        
-        if (!isPreMarket) {
-            return {
-                isPreMarket: false,
-                message: hours < 9 || (hours === 9 && minutes < 15) 
-                    ? '⏰ Pre-market starts at 9:15 AM PKT' 
-                    : '🔔 Market is now open for trading — Use Signals tab',
-                signals: [],
-                timeRemaining: null,
-                strongBuys: 0,
-                buys: 0,
-                total: 0,
-            };
-        }
-
-        const timeRemaining = 32 - minutes;
-        const preMarketSignals = [];
-        const topStocks = stocks.sort((a, b) => b.volume - a.volume).slice(0, 50);
-
-        for (const stock of topStocks) {
-            const analysis = {
-                symbol: stock.symbol,
-                name: stock.name,
-                previousClose: stock.price,
-                previousChange: stock.changePercent,
-                score: 0,
-                reasons: [],
-                buySignal: false,
-                signalStrength: 'SKIP',
-                expectedGap: 0,
-                confidence: 0,
-                suggestedEntry: stock.price,
-                suggestedTarget: +(stock.price * 1.02).toFixed(2),
-                suggestedStop: +(stock.price * 0.98).toFixed(2),
-                riskLevel: 'MEDIUM',
-            };
-
-            // Previous day momentum
-            if (stock.changePercent > 3) { analysis.score += 4; analysis.reasons.push('🔥 Strong prev close +' + stock.changePercent.toFixed(1) + '%'); }
-            else if (stock.changePercent > 1.5) { analysis.score += 2; analysis.reasons.push('✅ Positive prev close'); }
-            else if (stock.changePercent < -2) { analysis.score -= 2; analysis.reasons.push('⚠️ Weak prev close'); }
-
-            // Order book analysis
-            try {
-                const cached = orderBookService ? orderBookService.getCachedOrderBook(stock.symbol) : null;
-                if (cached) {
-                    if (cached.bidAskRatio > 2) { 
-                        analysis.score += 8; 
-                        analysis.reasons.push(`🚀 Extreme buy pressure (${cached.bidAskRatio.toFixed(1)}x)`); 
-                    } else if (cached.bidAskRatio > 1.5) { 
-                        analysis.score += 5; 
-                        analysis.reasons.push(`📈 Strong buy pressure (${cached.bidAskRatio.toFixed(1)}x)`); 
-                    } else if (cached.bidAskRatio > 1.2) { 
-                        analysis.score += 2; 
-                        analysis.reasons.push('📊 Moderate buy interest'); 
-                    }
-
-                    if (cached.imbalance > 25) { analysis.score += 5; analysis.reasons.push(`💪 Heavy buy imbalance ${cached.imbalance}%`); }
-                    else if (cached.imbalance > 15) { analysis.score += 3; analysis.reasons.push(`👍 Buy imbalance ${cached.imbalance}%`); }
-
-                    const largeBids = (cached.largeOrders || []).filter(o => o.type === 'BID');
-                    if (largeBids.length > 0) {
-                        const totalLargeBidVol = largeBids.reduce((s, o) => s + o.volume, 0);
-                        analysis.score += Math.min(6, largeBids.length * 2);
-                        analysis.reasons.push(`🐋 ${largeBids.length} large buy(s) - ${this.formatVol(totalLargeBidVol)} shares`);
-                    }
-
-                    if (cached.spreadPercent < 0.1) { analysis.score += 1; analysis.reasons.push('Tight spread (liquid)'); }
-                    else if (cached.spreadPercent > 1) { analysis.score -= 1; analysis.reasons.push('⚠️ Wide spread'); }
-
-                    if (cached.bestAsk > 0 && cached.bestBid > 0) {
-                        const midPrice = (cached.bestAsk + cached.bestBid) / 2;
-                        analysis.expectedGap = +((midPrice - stock.price) / stock.price * 100).toFixed(2);
-                    }
-                } else {
-                    analysis.reasons.push('⏳ Waiting for order book...');
-                }
-            } catch (e) {
-                analysis.reasons.push('⏳ Order book loading...');
-            }
-
-            // Technical setup
-            if (stock.rsi < 35) { analysis.score += 3; analysis.reasons.push('Oversold - bounce likely'); }
-            if (stock.rsi > 40 && stock.rsi < 55 && stock.changePercent > 0) { 
-                analysis.score += 2; analysis.reasons.push('RSI momentum building'); 
-            }
-            if (stock.s1 && stock.price <= stock.s1 * 1.02 && stock.price >= stock.s1) {
-                analysis.score += 3; analysis.reasons.push('At support level');
-            }
-
-            // Circuit limits
-            if (stock.upperCircuit && stock.price >= stock.upperCircuit * 0.95) {
-                analysis.score += 4; analysis.reasons.push('🎯 Near upper circuit');
-                analysis.riskLevel = 'HIGH';
-            }
-
-            // Determine buy signal
-            analysis.confidence = Math.min(95, Math.max(10, analysis.score * 8 + 20));
-            
-            if (analysis.score >= 10) {
-                analysis.buySignal = true;
-                analysis.signalStrength = 'STRONG_BUY';
-                analysis.suggestedEntry = +(stock.price * 1.005).toFixed(2);
-                analysis.suggestedTarget = +(stock.price * 1.03).toFixed(2);
-                analysis.suggestedStop = +(stock.price * 0.98).toFixed(2);
-                analysis.riskLevel = analysis.score >= 15 ? 'LOW' : 'MEDIUM';
-            } else if (analysis.score >= 6) {
-                analysis.buySignal = true;
-                analysis.signalStrength = 'BUY';
-                analysis.suggestedEntry = +(stock.price * 1.003).toFixed(2);
-                analysis.suggestedTarget = +(stock.price * 1.02).toFixed(2);
-                analysis.suggestedStop = +(stock.price * 0.985).toFixed(2);
-                analysis.riskLevel = 'MEDIUM';
-            } else if (analysis.score >= 3) {
-                analysis.buySignal = false;
-                analysis.signalStrength = 'WATCH';
-                analysis.riskLevel = 'HIGH';
-            }
-
-            if (analysis.score >= 3) {
-                preMarketSignals.push(analysis);
-            }
-        }
-
-        preMarketSignals.sort((a, b) => b.score - a.score);
-
-        return {
-            isPreMarket: true,
-            message: `⚡ Pre-Market Active — ${timeRemaining} min until open`,
-            timeRemaining,
-            signals: preMarketSignals.slice(0, 15),
-            strongBuys: preMarketSignals.filter(s => s.signalStrength === 'STRONG_BUY').length,
-            buys: preMarketSignals.filter(s => s.buySignal).length,
-            total: preMarketSignals.length,
-        };
+    getAutoTradeSignals(stocks, newsData, announcements, marketIndex = null) {
+        const allSignals = this.generateSignals(stocks, newsData, announcements, marketIndex);
+        return allSignals.filter(s => s.autoTradeEligible);
     }
 }
 

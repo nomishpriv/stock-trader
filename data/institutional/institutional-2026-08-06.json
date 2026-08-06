@@ -1,0 +1,793 @@
+{
+  "date": "2026-08-06",
+  "stocks": {
+    "BOP": {
+      "symbol": "BOP",
+      "name": "The Bank of Punjab",
+      "price": 36,
+      "entries": [
+        {
+          "time": "00:00",
+          "price": 36,
+          "volume": 66023844,
+          "changePercent": 3.6,
+          "bidVol": 0,
+          "askVol": 0,
+          "bidAskRatio": 1,
+          "imbalance": 0,
+          "spreadPercent": 0,
+          "top3BidVol": 0,
+          "top3AskVol": 0,
+          "largeBids": 0,
+          "largeAsks": 0,
+          "bestBid": 0,
+          "bestAsk": 0,
+          "trapConfidence": 50,
+          "score": 50,
+          "components": {
+            "orderBookDelta": 50,
+            "priceVolume": 50,
+            "largeOrders": 50,
+            "marketStructure": 50
+          },
+          "signal": "WATCH",
+          "emoji": "👀",
+          "reasons": [],
+          "previousSignal": "NEUTRAL"
+        }
+      ],
+      "currentSignal": "WATCH",
+      "signalStrength": 50,
+      "lastAlert": null
+    },
+    "UNITY": {
+      "symbol": "UNITY",
+      "name": "Unity Foods Limited",
+      "price": 11.9,
+      "entries": [
+        {
+          "time": "00:00",
+          "price": 11.9,
+          "volume": 62508135,
+          "changePercent": 6.82,
+          "bidVol": 0,
+          "askVol": 0,
+          "bidAskRatio": 1,
+          "imbalance": 0,
+          "spreadPercent": 0,
+          "top3BidVol": 0,
+          "top3AskVol": 0,
+          "largeBids": 0,
+          "largeAsks": 0,
+          "bestBid": 0,
+          "bestAsk": 0,
+          "trapConfidence": 50,
+          "score": 50,
+          "components": {
+            "orderBookDelta": 50,
+            "priceVolume": 50,
+            "largeOrders": 50,
+            "marketStructure": 50
+          },
+          "signal": "WATCH",
+          "emoji": "👀",
+          "reasons": [],
+          "previousSignal": "NEUTRAL"
+        }
+      ],
+      "currentSignal": "WATCH",
+      "signalStrength": 50,
+      "lastAlert": null
+    },
+    "CNERGY": {
+      "symbol": "CNERGY",
+      "name": "Cnergyico PK  Limited",
+      "price": 11.25,
+      "entries": [
+        {
+          "time": "00:00",
+          "price": 11.25,
+          "volume": 56219311,
+          "changePercent": 1.72,
+          "bidVol": 0,
+          "askVol": 0,
+          "bidAskRatio": 1,
+          "imbalance": 0,
+          "spreadPercent": 0,
+          "top3BidVol": 0,
+          "top3AskVol": 0,
+          "largeBids": 0,
+          "largeAsks": 0,
+          "bestBid": 0,
+          "bestAsk": 0,
+          "trapConfidence": 50,
+          "score": 50,
+          "components": {
+            "orderBookDelta": 50,
+            "priceVolume": 50,
+            "largeOrders": 50,
+            "marketStructure": 50
+          },
+          "signal": "WATCH",
+          "emoji": "👀",
+          "reasons": [],
+          "previousSignal": "NEUTRAL"
+        }
+      ],
+      "currentSignal": "WATCH",
+      "signalStrength": 50,
+      "lastAlert": null
+    },
+    "TSBL": {
+      "symbol": "TSBL",
+      "name": "Trust Securities & Brokerage Limited",
+      "price": 2.39,
+      "entries": [
+        {
+          "time": "00:00",
+          "price": 2.39,
+          "volume": 32748672,
+          "changePercent": -2.85,
+          "bidVol": 0,
+          "askVol": 0,
+          "bidAskRatio": 1,
+          "imbalance": 0,
+          "spreadPercent": 0,
+          "top3BidVol": 0,
+          "top3AskVol": 0,
+          "largeBids": 0,
+          "largeAsks": 0,
+          "bestBid": 0,
+          "bestAsk": 0,
+          "trapConfidence": 50,
+          "score": 50,
+          "components": {
+            "orderBookDelta": 50,
+            "priceVolume": 50,
+            "largeOrders": 50,
+            "marketStructure": 50
+          },
+          "signal": "WATCH",
+          "emoji": "👀",
+          "reasons": [],
+          "previousSignal": "NEUTRAL"
+        }
+      ],
+      "currentSignal": "WATCH",
+      "signalStrength": 50,
+      "lastAlert": null
+    },
+    "MLCF": {
+      "symbol": "MLCF",
+      "name": "Maple Leaf Cement Factory Limited",
+      "price": 103.09,
+      "entries": [
+        {
+          "time": "00:00",
+          "price": 103.09,
+          "volume": 30408553,
+          "changePercent": 5.26,
+          "bidVol": 0,
+          "askVol": 0,
+          "bidAskRatio": 1,
+          "imbalance": 0,
+          "spreadPercent": 0,
+          "top3BidVol": 0,
+          "top3AskVol": 0,
+          "largeBids": 0,
+          "largeAsks": 0,
+          "bestBid": 0,
+          "bestAsk": 0,
+          "trapConfidence": 50,
+          "score": 50,
+          "components": {
+            "orderBookDelta": 50,
+            "priceVolume": 50,
+            "largeOrders": 50,
+            "marketStructure": 50
+          },
+          "signal": "WATCH",
+          "emoji": "👀",
+          "reasons": [],
+          "previousSignal": "NEUTRAL"
+        }
+      ],
+      "currentSignal": "WATCH",
+      "signalStrength": 50,
+      "lastAlert": null
+    },
+    "PACE": {
+      "symbol": "PACE",
+      "name": "Pace (Pakistan) Limited",
+      "price": 11.06,
+      "entries": [
+        {
+          "time": "00:00",
+          "price": 11.06,
+          "volume": 26004112,
+          "changePercent": 1.75,
+          "bidVol": 0,
+          "askVol": 0,
+          "bidAskRatio": 1,
+          "imbalance": 0,
+          "spreadPercent": 0,
+          "top3BidVol": 0,
+          "top3AskVol": 0,
+          "largeBids": 0,
+          "largeAsks": 0,
+          "bestBid": 0,
+          "bestAsk": 0,
+          "trapConfidence": 50,
+          "score": 50,
+          "components": {
+            "orderBookDelta": 50,
+            "priceVolume": 50,
+            "largeOrders": 50,
+            "marketStructure": 50
+          },
+          "signal": "WATCH",
+          "emoji": "👀",
+          "reasons": [],
+          "previousSignal": "NEUTRAL"
+        }
+      ],
+      "currentSignal": "WATCH",
+      "signalStrength": 50,
+      "lastAlert": null
+    },
+    "WTL": {
+      "symbol": "WTL",
+      "name": "Worldcall Telecom Limited",
+      "price": 1.22,
+      "entries": [
+        {
+          "time": "00:00",
+          "price": 1.22,
+          "volume": 22085414,
+          "changePercent": -1.61,
+          "bidVol": 0,
+          "askVol": 0,
+          "bidAskRatio": 1,
+          "imbalance": 0,
+          "spreadPercent": 0,
+          "top3BidVol": 0,
+          "top3AskVol": 0,
+          "largeBids": 0,
+          "largeAsks": 0,
+          "bestBid": 0,
+          "bestAsk": 0,
+          "trapConfidence": 50,
+          "score": 50,
+          "components": {
+            "orderBookDelta": 50,
+            "priceVolume": 50,
+            "largeOrders": 50,
+            "marketStructure": 50
+          },
+          "signal": "WATCH",
+          "emoji": "👀",
+          "reasons": [],
+          "previousSignal": "NEUTRAL"
+        }
+      ],
+      "currentSignal": "WATCH",
+      "signalStrength": 50,
+      "lastAlert": null
+    },
+    "PIBTL": {
+      "symbol": "PIBTL",
+      "name": "Pakistan International Bulk Terminal",
+      "price": 16.9,
+      "entries": [
+        {
+          "time": "00:00",
+          "price": 16.9,
+          "volume": 20540858,
+          "changePercent": 0.72,
+          "bidVol": 0,
+          "askVol": 0,
+          "bidAskRatio": 1,
+          "imbalance": 0,
+          "spreadPercent": 0,
+          "top3BidVol": 0,
+          "top3AskVol": 0,
+          "largeBids": 0,
+          "largeAsks": 0,
+          "bestBid": 0,
+          "bestAsk": 0,
+          "trapConfidence": 50,
+          "score": 50,
+          "components": {
+            "orderBookDelta": 50,
+            "priceVolume": 50,
+            "largeOrders": 50,
+            "marketStructure": 50
+          },
+          "signal": "WATCH",
+          "emoji": "👀",
+          "reasons": [],
+          "previousSignal": "NEUTRAL"
+        }
+      ],
+      "currentSignal": "WATCH",
+      "signalStrength": 50,
+      "lastAlert": null
+    },
+    "SERF": {
+      "symbol": "SERF",
+      "name": "Service Fabrics Limited",
+      "price": 12.93,
+      "entries": [
+        {
+          "time": "00:00",
+          "price": 12.93,
+          "volume": 17868000,
+          "changePercent": 0.47,
+          "bidVol": 0,
+          "askVol": 0,
+          "bidAskRatio": 1,
+          "imbalance": 0,
+          "spreadPercent": 0,
+          "top3BidVol": 0,
+          "top3AskVol": 0,
+          "largeBids": 0,
+          "largeAsks": 0,
+          "bestBid": 0,
+          "bestAsk": 0,
+          "trapConfidence": 50,
+          "score": 50,
+          "components": {
+            "orderBookDelta": 50,
+            "priceVolume": 50,
+            "largeOrders": 50,
+            "marketStructure": 50
+          },
+          "signal": "WATCH",
+          "emoji": "👀",
+          "reasons": [],
+          "previousSignal": "NEUTRAL"
+        }
+      ],
+      "currentSignal": "WATCH",
+      "signalStrength": 50,
+      "lastAlert": null
+    },
+    "TPLP": {
+      "symbol": "TPLP",
+      "name": "TPL Properties Limited",
+      "price": 14.97,
+      "entries": [
+        {
+          "time": "00:00",
+          "price": 14.97,
+          "volume": 16352135,
+          "changePercent": 1.29,
+          "bidVol": 0,
+          "askVol": 0,
+          "bidAskRatio": 1,
+          "imbalance": 0,
+          "spreadPercent": 0,
+          "top3BidVol": 0,
+          "top3AskVol": 0,
+          "largeBids": 0,
+          "largeAsks": 0,
+          "bestBid": 0,
+          "bestAsk": 0,
+          "trapConfidence": 50,
+          "score": 50,
+          "components": {
+            "orderBookDelta": 50,
+            "priceVolume": 50,
+            "largeOrders": 50,
+            "marketStructure": 50
+          },
+          "signal": "WATCH",
+          "emoji": "👀",
+          "reasons": [],
+          "previousSignal": "NEUTRAL"
+        }
+      ],
+      "currentSignal": "WATCH",
+      "signalStrength": 50,
+      "lastAlert": null
+    },
+    "CSIL": {
+      "symbol": "CSIL",
+      "name": "Crescent Star Insurance Limited",
+      "price": 6.17,
+      "entries": [
+        {
+          "time": "00:00",
+          "price": 6.17,
+          "volume": 15096693,
+          "changePercent": 5.83,
+          "bidVol": 0,
+          "askVol": 0,
+          "bidAskRatio": 1,
+          "imbalance": 0,
+          "spreadPercent": 0,
+          "top3BidVol": 0,
+          "top3AskVol": 0,
+          "largeBids": 0,
+          "largeAsks": 0,
+          "bestBid": 0,
+          "bestAsk": 0,
+          "trapConfidence": 50,
+          "score": 50,
+          "components": {
+            "orderBookDelta": 50,
+            "priceVolume": 50,
+            "largeOrders": 50,
+            "marketStructure": 50
+          },
+          "signal": "WATCH",
+          "emoji": "👀",
+          "reasons": [],
+          "previousSignal": "NEUTRAL"
+        }
+      ],
+      "currentSignal": "WATCH",
+      "signalStrength": 50,
+      "lastAlert": null
+    },
+    "NCPL": {
+      "symbol": "NCPL",
+      "name": "Nishat Chunian Power Limited",
+      "price": 61.92,
+      "entries": [
+        {
+          "time": "00:00",
+          "price": 61.92,
+          "volume": 14299695,
+          "changePercent": 9.75,
+          "bidVol": 0,
+          "askVol": 0,
+          "bidAskRatio": 1,
+          "imbalance": 0,
+          "spreadPercent": 0,
+          "top3BidVol": 0,
+          "top3AskVol": 0,
+          "largeBids": 0,
+          "largeAsks": 0,
+          "bestBid": 0,
+          "bestAsk": 0,
+          "trapConfidence": 50,
+          "score": 50,
+          "components": {
+            "orderBookDelta": 50,
+            "priceVolume": 50,
+            "largeOrders": 50,
+            "marketStructure": 50
+          },
+          "signal": "WATCH",
+          "emoji": "👀",
+          "reasons": [],
+          "previousSignal": "NEUTRAL"
+        }
+      ],
+      "currentSignal": "WATCH",
+      "signalStrength": 50,
+      "lastAlert": null
+    },
+    "BYCO": {
+      "symbol": "BYCO",
+      "name": "Byco Petroleum Pakistan Limited",
+      "price": 6.17,
+      "entries": [
+        {
+          "time": "00:00",
+          "price": 6.17,
+          "volume": 13939000,
+          "changePercent": -3.44,
+          "bidVol": 0,
+          "askVol": 0,
+          "bidAskRatio": 1,
+          "imbalance": 0,
+          "spreadPercent": 0,
+          "top3BidVol": 0,
+          "top3AskVol": 0,
+          "largeBids": 0,
+          "largeAsks": 0,
+          "bestBid": 0,
+          "bestAsk": 0,
+          "trapConfidence": 50,
+          "score": 50,
+          "components": {
+            "orderBookDelta": 50,
+            "priceVolume": 50,
+            "largeOrders": 50,
+            "marketStructure": 50
+          },
+          "signal": "WATCH",
+          "emoji": "👀",
+          "reasons": [],
+          "previousSignal": "NEUTRAL"
+        }
+      ],
+      "currentSignal": "WATCH",
+      "signalStrength": 50,
+      "lastAlert": null
+    },
+    "PRL": {
+      "symbol": "PRL",
+      "name": "Pakistan Refinery Limited",
+      "price": 63.81,
+      "entries": [
+        {
+          "time": "00:00",
+          "price": 63.81,
+          "volume": 13534400,
+          "changePercent": 0.25,
+          "bidVol": 0,
+          "askVol": 0,
+          "bidAskRatio": 1,
+          "imbalance": 0,
+          "spreadPercent": 0,
+          "top3BidVol": 0,
+          "top3AskVol": 0,
+          "largeBids": 0,
+          "largeAsks": 0,
+          "bestBid": 0,
+          "bestAsk": 0,
+          "trapConfidence": 50,
+          "score": 50,
+          "components": {
+            "orderBookDelta": 50,
+            "priceVolume": 50,
+            "largeOrders": 50,
+            "marketStructure": 50
+          },
+          "signal": "WATCH",
+          "emoji": "👀",
+          "reasons": [],
+          "previousSignal": "NEUTRAL"
+        }
+      ],
+      "currentSignal": "WATCH",
+      "signalStrength": 50,
+      "lastAlert": null
+    },
+    "PAEL": {
+      "symbol": "PAEL",
+      "name": "Pak Elektron Limited",
+      "price": 44.38,
+      "entries": [
+        {
+          "time": "00:00",
+          "price": 44.38,
+          "volume": 13424046,
+          "changePercent": 4.92,
+          "bidVol": 0,
+          "askVol": 0,
+          "bidAskRatio": 1,
+          "imbalance": 0,
+          "spreadPercent": 0,
+          "top3BidVol": 0,
+          "top3AskVol": 0,
+          "largeBids": 0,
+          "largeAsks": 0,
+          "bestBid": 0,
+          "bestAsk": 0,
+          "trapConfidence": 50,
+          "score": 50,
+          "components": {
+            "orderBookDelta": 50,
+            "priceVolume": 50,
+            "largeOrders": 50,
+            "marketStructure": 50
+          },
+          "signal": "WATCH",
+          "emoji": "👀",
+          "reasons": [],
+          "previousSignal": "NEUTRAL"
+        }
+      ],
+      "currentSignal": "WATCH",
+      "signalStrength": 50,
+      "lastAlert": null
+    },
+    "KEL": {
+      "symbol": "KEL",
+      "name": "K-Electric Limited",
+      "price": 7.42,
+      "entries": [
+        {
+          "time": "00:00",
+          "price": 7.42,
+          "volume": 12685679,
+          "changePercent": 1.37,
+          "bidVol": 0,
+          "askVol": 0,
+          "bidAskRatio": 1,
+          "imbalance": 0,
+          "spreadPercent": 0,
+          "top3BidVol": 0,
+          "top3AskVol": 0,
+          "largeBids": 0,
+          "largeAsks": 0,
+          "bestBid": 0,
+          "bestAsk": 0,
+          "trapConfidence": 50,
+          "score": 50,
+          "components": {
+            "orderBookDelta": 50,
+            "priceVolume": 50,
+            "largeOrders": 50,
+            "marketStructure": 50
+          },
+          "signal": "WATCH",
+          "emoji": "👀",
+          "reasons": [],
+          "previousSignal": "NEUTRAL"
+        }
+      ],
+      "currentSignal": "WATCH",
+      "signalStrength": 50,
+      "lastAlert": null
+    },
+    "TPL": {
+      "symbol": "TPL",
+      "name": "TPL Corp Limited",
+      "price": 20.34,
+      "entries": [
+        {
+          "time": "00:00",
+          "price": 20.34,
+          "volume": 11835240,
+          "changePercent": 4.85,
+          "bidVol": 0,
+          "askVol": 0,
+          "bidAskRatio": 1,
+          "imbalance": 0,
+          "spreadPercent": 0,
+          "top3BidVol": 0,
+          "top3AskVol": 0,
+          "largeBids": 0,
+          "largeAsks": 0,
+          "bestBid": 0,
+          "bestAsk": 0,
+          "trapConfidence": 50,
+          "score": 50,
+          "components": {
+            "orderBookDelta": 50,
+            "priceVolume": 50,
+            "largeOrders": 50,
+            "marketStructure": 50
+          },
+          "signal": "WATCH",
+          "emoji": "👀",
+          "reasons": [],
+          "previousSignal": "NEUTRAL"
+        }
+      ],
+      "currentSignal": "WATCH",
+      "signalStrength": 50,
+      "lastAlert": null
+    },
+    "BNL": {
+      "symbol": "BNL",
+      "name": "Bunnys Limited",
+      "price": 6.71,
+      "entries": [
+        {
+          "time": "00:00",
+          "price": 6.71,
+          "volume": 11530241,
+          "changePercent": -0.15,
+          "bidVol": 0,
+          "askVol": 0,
+          "bidAskRatio": 1,
+          "imbalance": 0,
+          "spreadPercent": 0,
+          "top3BidVol": 0,
+          "top3AskVol": 0,
+          "largeBids": 0,
+          "largeAsks": 0,
+          "bestBid": 0,
+          "bestAsk": 0,
+          "trapConfidence": 50,
+          "score": 50,
+          "components": {
+            "orderBookDelta": 50,
+            "priceVolume": 50,
+            "largeOrders": 50,
+            "marketStructure": 50
+          },
+          "signal": "WATCH",
+          "emoji": "👀",
+          "reasons": [],
+          "previousSignal": "NEUTRAL"
+        }
+      ],
+      "currentSignal": "WATCH",
+      "signalStrength": 50,
+      "lastAlert": null
+    },
+    "TOMCL": {
+      "symbol": "TOMCL",
+      "name": "The Organic Meat Company Limited",
+      "price": 40.84,
+      "entries": [
+        {
+          "time": "00:00",
+          "price": 40.84,
+          "volume": 11417593,
+          "changePercent": 9.37,
+          "bidVol": 0,
+          "askVol": 0,
+          "bidAskRatio": 1,
+          "imbalance": 0,
+          "spreadPercent": 0,
+          "top3BidVol": 0,
+          "top3AskVol": 0,
+          "largeBids": 0,
+          "largeAsks": 0,
+          "bestBid": 0,
+          "bestAsk": 0,
+          "trapConfidence": 50,
+          "score": 50,
+          "components": {
+            "orderBookDelta": 50,
+            "priceVolume": 50,
+            "largeOrders": 50,
+            "marketStructure": 50
+          },
+          "signal": "WATCH",
+          "emoji": "👀",
+          "reasons": [],
+          "previousSignal": "NEUTRAL"
+        }
+      ],
+      "currentSignal": "WATCH",
+      "signalStrength": 50,
+      "lastAlert": null
+    },
+    "FCCL": {
+      "symbol": "FCCL",
+      "name": "Fauji Cement Company Limited",
+      "price": 56.88,
+      "entries": [
+        {
+          "time": "00:00",
+          "price": 56.88,
+          "volume": 10972704,
+          "changePercent": 0.81,
+          "bidVol": 0,
+          "askVol": 0,
+          "bidAskRatio": 1,
+          "imbalance": 0,
+          "spreadPercent": 0,
+          "top3BidVol": 0,
+          "top3AskVol": 0,
+          "largeBids": 0,
+          "largeAsks": 0,
+          "bestBid": 0,
+          "bestAsk": 0,
+          "trapConfidence": 50,
+          "score": 50,
+          "components": {
+            "orderBookDelta": 50,
+            "priceVolume": 50,
+            "largeOrders": 50,
+            "marketStructure": 50
+          },
+          "signal": "WATCH",
+          "emoji": "👀",
+          "reasons": [],
+          "previousSignal": "NEUTRAL"
+        }
+      ],
+      "currentSignal": "WATCH",
+      "signalStrength": 50,
+      "lastAlert": null
+    }
+  },
+  "signals": [],
+  "summary": {
+    "activeStocks": 20,
+    "strongBuySignals": 0,
+    "buySignals": 0,
+    "sellSignals": 0,
+    "lastUpdated": "2026-08-06T19:40:54.179Z"
+  }
+}

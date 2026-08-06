@@ -1,5 +1,17 @@
 'use strict';
 
+/**
+ * ================================================================
+ * IMPROVED TRADE JOURNAL SERVICE v2.0
+ * Changes:
+ *  1. Auto-trade support (source tracking, no averaging down for auto)
+ *  2. Daily loss limit protection
+ *  3. Exposure limit tracking
+ *  4. Better P&L calculation with fees estimation
+ *  5. Trade validation before opening
+ * ================================================================
+ */
+
 const fs = require('fs');
 const path = require('path');
 
@@ -7,6 +19,15 @@ const DATA_DIR = path.join(__dirname, '..', 'data', 'trades');
 const OPEN_TRADES_FILE = path.join(DATA_DIR, 'open-trades.json');
 const CLOSED_TRADES_FILE = path.join(DATA_DIR, 'closed-trades.json');
 const TRADE_HISTORY_DIR = path.join(DATA_DIR, 'history');
+
+// ✅ NEW: Risk management config
+const RISK_CONFIG = {
+    maxDailyLoss: -50000,      // Stop trading if daily loss exceeds Rs. 50K
+    maxOpenExposure: 500000,   // Max Rs. 5L in open positions
+    maxTradesPerDay: 20,       // Prevent over-trading
+    brokerageRate: 0.001,      // 0.1% per side (buy + sell)
+    taxRate: 0.0002            // 0.02% CVT
+};
 
 class TradeJournalService {
     constructor() {
@@ -40,7 +61,7 @@ class TradeJournalService {
 
     saveTradeHistory(trade) {
         try {
-            const month = new Date().toISOString().substring(0, 7); // YYYY-MM
+            const month = new Date().toISOString().substring(0, 7);
             const historyDir = path.join(TRADE_HISTORY_DIR, month);
             if (!fs.existsSync(historyDir)) fs.mkdirSync(historyDir, { recursive: true });
             const file = path.join(historyDir, `${trade.id}.json`);
@@ -48,11 +69,57 @@ class TradeJournalService {
         } catch (e) {}
     }
 
+    // ✅ NEW: Risk check before opening trade
+    canOpenTrade(symbol, quantity, entryPrice, source = 'MANUAL') {
+        const today = new Date().toISOString().split('T')[0];
+        const todayTrades = this.closedTrades.filter(t => 
+            t.exitDate && t.exitDate.startsWith(today)
+        );
+        const todayPnl = todayTrades.reduce((s, t) => s + (t.finalPnl || 0), 0);
+        const todayCount = todayTrades.length + this.openTrades.filter(t => 
+            t.entryDate.startsWith(today)
+        ).length;
+        const openExposure = this.openTrades.reduce((s, t) => s + t.totalCost, 0);
+        const tradeValue = quantity * entryPrice;
+
+        // Daily loss limit
+        if (todayPnl <= RISK_CONFIG.maxDailyLoss) {
+            return { allowed: false, reason: `Daily loss limit reached: Rs.${todayPnl}` };
+        }
+
+        // Max trades per day
+        if (todayCount >= RISK_CONFIG.maxTradesPerDay) {
+            return { allowed: false, reason: `Max ${RISK_CONFIG.maxTradesPerDay} trades/day reached` };
+        }
+
+        // Exposure limit
+        if (openExposure + tradeValue > RISK_CONFIG.maxOpenExposure) {
+            return { allowed: false, reason: `Exposure limit Rs.${RISK_CONFIG.maxOpenExposure} would be exceeded` };
+        }
+
+        // Duplicate check (manual only — auto has its own logic)
+        if (source === 'MANUAL' || source === 'SIGNAL_TAB') {
+            const existing = this.openTrades.find(t => t.symbol === symbol);
+            if (existing) {
+                return { allowed: false, reason: `Already holding ${symbol}` };
+            }
+        }
+
+        return { allowed: true, reason: 'OK' };
+    }
+
     /**
      * Open a new trade from signal
      */
     openTrade(params) {
         const { symbol, name, signal, tradeType, entryPrice, targetPrice, stopLoss, quantity, riskReward, riskLevel, source } = params;
+
+        // ✅ Risk check
+        const riskCheck = this.canOpenTrade(symbol, quantity || 100, entryPrice, source);
+        if (!riskCheck.allowed) {
+            console.warn(`[TRADE BLOCKED] ${symbol}: ${riskCheck.reason}`);
+            return { blocked: true, reason: riskCheck.reason };
+        }
 
         const trade = {
             id: 'TRD' + Date.now(),
@@ -62,47 +129,50 @@ class TradeJournalService {
             tradeType: tradeType || 'DAY',
             source: source || 'SIGNAL',
             status: 'OPEN',
-            
-            // Entry
+
             entryPrice: +entryPrice,
             entryDate: new Date().toISOString(),
             entryTime: new Date().toLocaleTimeString('en-PK', { timeZone: 'Asia/Karachi', hour: '2-digit', minute: '2-digit' }),
-            
-            // Exit targets
+
             targetPrice: +targetPrice,
             stopLoss: +stopLoss,
             riskReward: +riskReward || 0,
             riskLevel: riskLevel || 'MEDIUM',
-            
-            // Quantity & Cost
+
             quantity: +quantity || 100,
             totalCost: (+entryPrice * (+quantity || 100)),
-            
-            // Current state
+
             currentPrice: +entryPrice,
             currentPnl: 0,
             currentPnlPercent: 0,
             highestPrice: +entryPrice,
             lowestPrice: +entryPrice,
-            
-            // Exit info (filled when closed)
+
             exitPrice: null,
             exitDate: null,
             exitReason: null,
-            
-            // Accumulation
+
             averagedDown: false,
             averageCount: 0,
             averagePrices: [],
-            
-            // Notes
+
             notes: [],
-            updates: []
+            updates: [],
+
+            // ✅ NEW: Fee tracking
+            entryFees: this.calculateFees(+entryPrice * (+quantity || 100))
         };
 
         this.openTrades.unshift(trade);
         this.saveOpenTrades();
         return trade;
+    }
+
+    // ✅ NEW: Fee calculator
+    calculateFees(tradeValue) {
+        const brokerage = tradeValue * RISK_CONFIG.brokerageRate;
+        const tax = tradeValue * RISK_CONFIG.taxRate;
+        return +(brokerage + tax).toFixed(2);
     }
 
     /**
@@ -114,8 +184,7 @@ class TradeJournalService {
         const now = new Date();
         const pkTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Karachi' }));
         const timeStr = pkTime.toTimeString().split(' ')[0].substring(0, 5);
-        
-        // ✅ ADDED: Market-hours guard for auto-close
+
         const hour = pkTime.getHours();
         const minutes = pkTime.getMinutes();
         const day = pkTime.getDay();
@@ -128,7 +197,7 @@ class TradeJournalService {
                          (timeInMinutes >= (14*60+32) && timeInMinutes <= (16*60+30));
         }
 
-        const toClose = []; // ✅ FIX: Collect closures to avoid iterator invalidation
+        const toClose = [];
 
         for (const trade of this.openTrades) {
             const stock = stocks.find(s => s.symbol === trade.symbol);
@@ -139,13 +208,11 @@ class TradeJournalService {
             trade.highestPrice = Math.max(trade.highestPrice, stock.price);
             trade.lowestPrice = Math.min(trade.lowestPrice, stock.price);
 
-            // ✅ FIX: True weighted average = totalCost / totalQuantity
             const avgPrice = trade.quantity > 0 ? trade.totalCost / trade.quantity : trade.entryPrice;
-            
+
             trade.currentPnl = +((stock.price - avgPrice) * trade.quantity).toFixed(2);
             trade.currentPnlPercent = +(((stock.price - avgPrice) / avgPrice) * 100).toFixed(2);
 
-            // ✅ FIX: Only auto-close during market hours + collect for post-loop execution
             if (marketOpen) {
                 if (stock.price >= trade.targetPrice) {
                     toClose.push({ id: trade.id, price: stock.price, reason: 'TARGET_HIT', note: `Target ${trade.targetPrice.toFixed(2)} reached at ${timeStr}` });
@@ -157,7 +224,6 @@ class TradeJournalService {
                 }
             }
 
-            // Add price update
             if (prevPrice !== stock.price) {
                 trade.updates.push({
                     time: timeStr,
@@ -169,7 +235,6 @@ class TradeJournalService {
             }
         }
 
-        // ✅ FIX: Close after loop to prevent skipped trades
         for (const c of toClose) {
             this.closeTrade(c.id, c.price, c.reason, c.note);
         }
@@ -191,20 +256,23 @@ class TradeJournalService {
         trade.exitReason = reason;
         trade.currentPrice = +exitPrice;
 
-        // ✅ FIX: True weighted average = totalCost / totalQuantity
         const avgPrice = trade.quantity > 0 ? trade.totalCost / trade.quantity : trade.entryPrice;
-        
-        trade.finalPnl = +((exitPrice - avgPrice) * trade.quantity).toFixed(2);
+
+        const grossPnl = +((exitPrice - avgPrice) * trade.quantity).toFixed(2);
+        const exitFees = this.calculateFees(exitPrice * trade.quantity);
+        const totalFees = (trade.entryFees || 0) + exitFees;
+
+        trade.finalPnl = +(grossPnl - totalFees).toFixed(2);
         trade.finalPnlPercent = +(((exitPrice - avgPrice) / avgPrice) * 100).toFixed(2);
         trade.profit = trade.finalPnl > 0;
-        
+        trade.exitFees = exitFees;
+        trade.totalFees = totalFees;
+
         if (note) trade.notes.push({ time: new Date().toISOString(), note });
 
-        // Move to closed
         this.openTrades.splice(idx, 1);
         this.closedTrades.unshift(trade);
-        
-        // Keep only last 500 closed trades
+
         if (this.closedTrades.length > 500) this.closedTrades = this.closedTrades.slice(0, 500);
 
         this.saveOpenTrades();
@@ -216,10 +284,16 @@ class TradeJournalService {
 
     /**
      * Average down on a trade
+     * ✅ BLOCKED for auto-trader positions
      */
     averageDown(tradeId, additionalQuantity, currentPrice) {
         const trade = this.openTrades.find(t => t.id === tradeId);
         if (!trade) return null;
+
+        // ✅ Auto-trader positions cannot be averaged down
+        if (trade.source === 'AUTO_TRADER') {
+            return { blocked: true, reason: 'Auto-trader positions cannot be averaged down' };
+        }
 
         const qty = +additionalQuantity || 0;
         const price = +currentPrice || 0;
@@ -227,21 +301,19 @@ class TradeJournalService {
 
         trade.averagedDown = true;
         trade.averageCount++;
-        
-        // ✅ FIX: Store price WITH quantity for true weighted average
+
         if (!Array.isArray(trade.averagePrices)) trade.averagePrices = [];
         trade.averagePrices.push({
             price: price,
             quantity: qty,
             time: new Date().toISOString()
         });
-        
+
         trade.quantity += qty;
         trade.totalCost += (price * qty);
-        
-        // ✅ FIX: True weighted average = totalCost / totalQuantity
+
         const avgPrice = trade.quantity > 0 ? trade.totalCost / trade.quantity : trade.entryPrice;
-        
+
         trade.notes.push({
             time: new Date().toISOString(),
             note: `Averaged down: +${qty} sh @ ${price.toFixed(2)}. New avg: ${avgPrice.toFixed(2)} (Total: ${trade.quantity} sh, Cost: Rs.${trade.totalCost.toFixed(0)})`
@@ -258,18 +330,24 @@ class TradeJournalService {
         const allClosed = this.closedTrades;
         const winning = allClosed.filter(t => t.finalPnl > 0);
         const losing = allClosed.filter(t => t.finalPnl <= 0);
-        
+
         const totalPnl = allClosed.reduce((s, t) => s + (t.finalPnl || 0), 0);
         const totalWins = winning.length;
         const totalLosses = losing.length;
         const winRate = allClosed.length > 0 ? ((totalWins / allClosed.length) * 100).toFixed(1) : 0;
-        
+
         const avgWin = totalWins > 0 ? (winning.reduce((s, t) => s + t.finalPnl, 0) / totalWins).toFixed(2) : 0;
         const avgLoss = totalLosses > 0 ? (losing.reduce((s, t) => s + t.finalPnl, 0) / totalLosses).toFixed(2) : 0;
-        
+
         const todayStart = new Date().toISOString().split('T')[0];
         const todayTrades = allClosed.filter(t => t.exitDate?.startsWith(todayStart));
         const todayPnl = todayTrades.reduce((s, t) => s + (t.finalPnl || 0), 0);
+
+        // ✅ NEW: Source breakdown
+        const autoTrades = allClosed.filter(t => t.source === 'AUTO_TRADER');
+        const autoWinRate = autoTrades.length > 0 
+            ? (autoTrades.filter(t => t.profit).length / autoTrades.length * 100).toFixed(1) 
+            : 0;
 
         return {
             openTrades: this.openTrades.length,
@@ -282,7 +360,14 @@ class TradeJournalService {
             avgLoss: +avgLoss,
             todayTrades: todayTrades.length,
             todayPnl: +todayPnl.toFixed(2),
-            openExposure: this.openTrades.reduce((s, t) => s + t.totalCost, 0)
+            openExposure: this.openTrades.reduce((s, t) => s + t.totalCost, 0),
+            // Auto-trader stats
+            autoTrader: {
+                totalAutoTrades: autoTrades.length,
+                autoWinRate: +autoWinRate,
+                autoPnl: +autoTrades.reduce((s, t) => s + (t.finalPnl || 0), 0).toFixed(2),
+                openAutoPositions: this.openTrades.filter(t => t.source === 'AUTO_TRADER').length
+            }
         };
     }
 
@@ -294,6 +379,29 @@ class TradeJournalService {
             open: this.openTrades,
             closed: this.closedTrades.slice(0, 50),
             summary: this.getSummary()
+        };
+    }
+
+    /**
+     * ✅ NEW: Get risk status for dashboard
+     */
+    getRiskStatus() {
+        const today = new Date().toISOString().split('T')[0];
+        const todayPnl = this.closedTrades
+            .filter(t => t.exitDate?.startsWith(today))
+            .reduce((s, t) => s + (t.finalPnl || 0), 0);
+
+        const openExposure = this.openTrades.reduce((s, t) => s + t.totalCost, 0);
+
+        return {
+            dailyLossLimit: RISK_CONFIG.maxDailyLoss,
+            dailyLossCurrent: +todayPnl.toFixed(2),
+            dailyLossRemaining: +(RISK_CONFIG.maxDailyLoss - todayPnl).toFixed(2),
+            maxExposure: RISK_CONFIG.maxOpenExposure,
+            currentExposure: openExposure,
+            exposureRemaining: RISK_CONFIG.maxOpenExposure - openExposure,
+            dailyLossBreached: todayPnl <= RISK_CONFIG.maxDailyLoss,
+            exposureBreached: openExposure >= RISK_CONFIG.maxOpenExposure
         };
     }
 }
