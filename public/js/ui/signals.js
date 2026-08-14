@@ -13,6 +13,18 @@ const UISignals = {
         
         document.getElementById('signalsList').innerHTML = filtered.map(s => {
             const escapedName = (s.name || '').replace(/'/g, "\\'");
+            const qty = calculateTradeQuantity(s.entryPrice, s.stopLoss);
+            const riskRs = Math.abs(s.entryPrice - s.stopLoss) * qty;
+            const canTake = (s.journalEligible !== false) && s.score >= CONFIG.MIN_SIGNAL_SCORE_TAKE &&
+                s.signal !== 'WEAK_BUY' && s.signal !== 'NEUTRAL';
+            const takeBtn = canTake
+                ? `<button class="tj-btn tj-btn-take" onclick="event.stopPropagation();UITradeJournal.takeTradeFromSignal({
+                    symbol:'${s.symbol}', name:'${escapedName}', signal:'${s.signal}',
+                    tradeType:'${s.tradeType}', entryPrice:${s.entryPrice},
+                    targetPrice:${s.targetPrice}, stopLoss:${s.stopLoss},
+                    riskReward:${s.riskReward}, riskLevel:'${s.riskLevel}'
+                }, ${qty})" style="margin-top:4px;width:100%">📒 Take Trade (${qty} sh · risk Rs.${riskRs.toFixed(0)})</button>`
+                : `<div style="font-size:10px;color:var(--orange);text-align:center;margin-top:6px">⚠️ Score too low — manual review only</div>`;
             return `<div class="signal-card" style="border-left-color:${s.color}" onclick="App.openStock('${s.symbol}')">
                 <div class="signal-header">
                     <div>
@@ -38,12 +50,7 @@ const UISignals = {
                 <div style="font-size:10px;color:var(--text2);text-align:center;margin-top:4px">
                     R:R ${s.riskReward}:1 | Risk: ${s.riskLevel}
                 </div>
-                <button class="tj-btn tj-btn-take" onclick="event.stopPropagation();UITradeJournal.takeTradeFromSignal({
-                    symbol:'${s.symbol}', name:'${escapedName}', signal:'${s.signal}',
-                    tradeType:'${s.tradeType}', entryPrice:${s.entryPrice},
-                    targetPrice:${s.targetPrice}, stopLoss:${s.stopLoss},
-                    riskReward:${s.riskReward}, riskLevel:'${s.riskLevel}'
-                })" style="margin-top:4px;width:100%">📒 Take Trade (500 sh)</button>
+                ${takeBtn}
             </div>`;
         }).join('');
     }

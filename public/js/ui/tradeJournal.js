@@ -20,6 +20,9 @@ const UITradeJournal = {
             openEl.innerHTML = openTrades.map(t => {
                 const pnlClass = t.currentPnl >= 0 ? 'tj-pnl-positive' : 'tj-pnl-negative';
                 const sourceLabel = getSourceLabel(t.source);
+                const distStopPct = t.stopLoss ? ((t.currentPrice - t.stopLoss) / t.entryPrice * 100) : 999;
+                const nearStop = distStopPct < 0.5 && distStopPct >= 0;
+                const stopWarning = nearStop ? '<span style="color:var(--red);font-size:10px"> ⚠️ Near stop</span>' : '';
                 return `<div class="tj-trade-card open" onclick="App.openStock('${t.symbol}')">
                     <div class="tj-trade-header">
                         <span>
@@ -35,7 +38,7 @@ const UITradeJournal = {
                     <div style="font-size:11px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-top:4px">
                         <div>Entry: <b style="color:var(--blue)">${t.entryPrice?.toFixed(2)}</b></div>
                         <div>Target: <b style="color:var(--green)">${t.targetPrice?.toFixed(2)}</b></div>
-                        <div>Stop: <b style="color:var(--red)">${t.stopLoss?.toFixed(2)}</b></div>
+                        <div>Stop: <b style="color:var(--red)">${t.stopLoss?.toFixed(2)}</b>${stopWarning}</div>
                     </div>
                     <div style="font-size:10px;color:var(--text2);margin-top:4px">
                         Qty: ${t.quantity} | Cost: Rs.${t.totalCost?.toFixed(0)} | ${formatTradeDateTime(t.entryDate)}

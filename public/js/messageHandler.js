@@ -147,6 +147,7 @@ const MessageHandler = {
                 
             case 'TRADE_ERROR':
                 console.error('Trade Error:', msg.message);
+                alert('Trade blocked: ' + (msg.message || 'Unknown error'));
                 break;
                 
             case 'SEARCH_RESULTS':

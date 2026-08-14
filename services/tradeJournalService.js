@@ -25,8 +25,14 @@ const RISK_CONFIG = {
     maxDailyLoss: -50000,      // Stop trading if daily loss exceeds Rs. 50K
     maxOpenExposure: 500000,   // Max Rs. 5L in open positions
     maxTradesPerDay: 20,       // Prevent over-trading
+    maxRiskPerTrade: 2500,     // Max Rs. 2,500 risk per position (2.5% of 100K)
+    maxOpenTrades: 5,          // Cap concurrent positions
     brokerageRate: 0.001,      // 0.1% per side (buy + sell)
-    taxRate: 0.0002            // 0.02% CVT
+    taxRate: 0.0002,           // 0.02% CVT
+    trailingStopPercent: 0.5,  // Trail stop up when price rises 0.5% from entry
+    dayTradeCloseHour: 15,     // Auto-close DAY trades at 3:00 PM PKT
+    dayTradeCloseMinute: 0,
+    maxHoldDaysSwing: 5        // Force review/exit swing trades after 5 days
 };
 
 class TradeJournalService {
@@ -70,7 +76,7 @@ class TradeJournalService {
     }
 
     // ✅ NEW: Risk check before opening trade
-    canOpenTrade(symbol, quantity, entryPrice, source = 'MANUAL') {
+    canOpenTrade(symbol, quantity, entryPrice, source = 'MANUAL', stopLoss = null) {
         const today = new Date().toISOString().split('T')[0];
         const todayTrades = this.closedTrades.filter(t => 
             t.exitDate && t.exitDate.startsWith(today)
@@ -82,26 +88,33 @@ class TradeJournalService {
         const openExposure = this.openTrades.reduce((s, t) => s + t.totalCost, 0);
         const tradeValue = quantity * entryPrice;
 
-        // Daily loss limit
         if (todayPnl <= RISK_CONFIG.maxDailyLoss) {
             return { allowed: false, reason: `Daily loss limit reached: Rs.${todayPnl}` };
         }
-
-        // Max trades per day
         if (todayCount >= RISK_CONFIG.maxTradesPerDay) {
             return { allowed: false, reason: `Max ${RISK_CONFIG.maxTradesPerDay} trades/day reached` };
         }
-
-        // Exposure limit
         if (openExposure + tradeValue > RISK_CONFIG.maxOpenExposure) {
             return { allowed: false, reason: `Exposure limit Rs.${RISK_CONFIG.maxOpenExposure} would be exceeded` };
         }
-
-        // Duplicate check (manual only — auto has its own logic)
         if (source === 'MANUAL' || source === 'SIGNAL_TAB') {
             const existing = this.openTrades.find(t => t.symbol === symbol);
             if (existing) {
                 return { allowed: false, reason: `Already holding ${symbol}` };
+            }
+        }
+        if (this.openTrades.length >= RISK_CONFIG.maxOpenTrades) {
+            return { allowed: false, reason: `Max ${RISK_CONFIG.maxOpenTrades} open trades — close one first` };
+        }
+        if (stopLoss != null && stopLoss > 0) {
+            const riskPerShare = Math.abs(entryPrice - stopLoss);
+            const tradeRisk = riskPerShare * quantity;
+            if (tradeRisk > RISK_CONFIG.maxRiskPerTrade) {
+                const maxQty = Math.floor(RISK_CONFIG.maxRiskPerTrade / riskPerShare);
+                return {
+                    allowed: false,
+                    reason: `Risk Rs.${tradeRisk.toFixed(0)} > max Rs.${RISK_CONFIG.maxRiskPerTrade}. Use ≤${maxQty} shares`
+                };
             }
         }
 
@@ -115,7 +128,7 @@ class TradeJournalService {
         const { symbol, name, signal, tradeType, entryPrice, targetPrice, stopLoss, quantity, riskReward, riskLevel, source } = params;
 
         // ✅ Risk check
-        const riskCheck = this.canOpenTrade(symbol, quantity || 100, entryPrice, source);
+        const riskCheck = this.canOpenTrade(symbol, quantity || 100, entryPrice, source, stopLoss);
         if (!riskCheck.allowed) {
             console.warn(`[TRADE BLOCKED] ${symbol}: ${riskCheck.reason}`);
             return { blocked: true, reason: riskCheck.reason };
@@ -158,6 +171,7 @@ class TradeJournalService {
 
             notes: [],
             updates: [],
+            initialStopLoss: +stopLoss,
 
             // ✅ NEW: Fee tracking
             entryFees: this.calculateFees(+entryPrice * (+quantity || 100))
@@ -208,10 +222,47 @@ class TradeJournalService {
             trade.highestPrice = Math.max(trade.highestPrice, stock.price);
             trade.lowestPrice = Math.min(trade.lowestPrice, stock.price);
 
+            // ✅ Trailing stop: once up 0.5%+, move stop to breakeven; trail at 50% of gain
+            const gainFromEntry = (trade.highestPrice - trade.entryPrice) / trade.entryPrice * 100;
+            if (gainFromEntry >= RISK_CONFIG.trailingStopPercent) {
+                const trailStop = trade.entryPrice + (trade.highestPrice - trade.entryPrice) * 0.5;
+                if (trailStop > trade.stopLoss) {
+                    trade.stopLoss = +trailStop.toFixed(2);
+                }
+            }
+
             const avgPrice = trade.quantity > 0 ? trade.totalCost / trade.quantity : trade.entryPrice;
 
             trade.currentPnl = +((stock.price - avgPrice) * trade.quantity).toFixed(2);
             trade.currentPnlPercent = +(((stock.price - avgPrice) / avgPrice) * 100).toFixed(2);
+
+            const isDayTrade = (trade.tradeType || '').includes('DAY');
+            const holdDays = (Date.now() - new Date(trade.entryDate).getTime()) / 86400000;
+
+            // ✅ Auto-close pure DAY trades before market close
+            if (marketOpen && isDayTrade && !(trade.tradeType || '').includes('SWING')) {
+                if (hour > RISK_CONFIG.dayTradeCloseHour ||
+                    (hour === RISK_CONFIG.dayTradeCloseHour && minutes >= RISK_CONFIG.dayTradeCloseMinute)) {
+                    toClose.push({
+                        id: trade.id,
+                        price: stock.price,
+                        reason: 'EOD_EXIT',
+                        note: `DAY trade closed at ${timeStr} before market close`
+                    });
+                    continue;
+                }
+            }
+
+            // ✅ Swing trades held too long with loss — cut
+            if (marketOpen && holdDays >= RISK_CONFIG.maxHoldDaysSwing && trade.currentPnl < 0) {
+                toClose.push({
+                    id: trade.id,
+                    price: stock.price,
+                    reason: 'TIME_EXIT',
+                    note: `Swing held ${Math.floor(holdDays)} days with loss — auto exit`
+                });
+                continue;
+            }
 
             if (marketOpen) {
                 if (stock.price >= trade.targetPrice) {

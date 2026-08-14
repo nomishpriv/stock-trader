@@ -72,14 +72,6 @@ class TradingSignalService {
         return marketOpen && marketClose;
     }
 
-    /** Avoid afternoon chase entries for DAY signals (after 2:30 PM PKT) */
-    isGoodEntryWindow() {
-        const now = new Date();
-        const pkTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Karachi' }));
-        const mins = pkTime.getHours() * 60 + pkTime.getMinutes();
-        return mins >= (9 * 60 + 32) && mins <= (14 * 60 + 30);
-    }
-
     formatVol(v) {
         if (!v) return '0';
         if (v >= 1000000) return (v/1000000).toFixed(1) + 'M';
@@ -332,15 +324,6 @@ class TradingSignalService {
                 if (!type.includes('SWING')) type.push('SWING'); 
             }
 
-            // ✅ Late-day penalty — DCR/PAEL/GATM all entered ~1:34 PM and struggled
-            if (!this.isGoodEntryWindow() && type.includes('DAY')) {
-                score -= 3;
-                reasons.push('Late entry — DAY only until 2:30 PM');
-            }
-
-            // ✅ Block WEAK_BUY from journal — SGPL WEAK_BUY lost -1670
-            const journalEligible = score >= 9;
-
             // ==================== TARGET & STOP (SMART) ====================
             const entry = stock.price;
             const stop = this.calculateSmartStop(stock, entry, isBlueChip);
@@ -401,7 +384,6 @@ class TradingSignalService {
                     marketStatus: marketOpen ? 'MARKET_OPEN' : 'MARKET_CLOSED',
                     isBlueChip,
                     autoTradeEligible: isAutoTradable,
-                    journalEligible,
                     qualityPassed: true
                 });
             }
