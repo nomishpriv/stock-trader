@@ -14,22 +14,62 @@ class SmartMoneyTrendService {
         this.maxHistory = 100;
     }
 
-    generateSignals(stocks, moodAnalysis, sectorAnalysis) {
+    generateSignals(stocks, moodAnalysis, sectorAnalysis, orderFlowSignals = [], institutionalSignals = {}) {
         const signals = [];
         const globalMood = moodAnalysis?.mood || 'NEUTRAL';
         const globalPhase = moodAnalysis?.phase || 'NEUTRAL';
         const globalSignal = moodAnalysis?.signal || 'HOLD';
 
+        // Normalize sector analysis — can be array or object with `sectors`
+        let sectorArray = [];
+        if (Array.isArray(sectorAnalysis)) {
+            sectorArray = sectorAnalysis;
+        } else if (sectorAnalysis?.sectors && Array.isArray(sectorAnalysis.sectors)) {
+            sectorArray = sectorAnalysis.sectors;
+        }
+
         const sectorMap = new Map();
-        if (sectorAnalysis) {
-            sectorAnalysis.forEach(s => sectorMap.set(s.name, s));
+        sectorArray.forEach(s => sectorMap.set(s.name, s));
+
+        // Normalize order flow signals — array or object keyed by symbol
+        let flowMap = {};
+        if (Array.isArray(orderFlowSignals)) {
+            orderFlowSignals.forEach(f => { if (f?.symbol) flowMap[f.symbol] = f; });
+        } else if (orderFlowSignals && typeof orderFlowSignals === 'object') {
+            flowMap = orderFlowSignals;
+        }
+
+        // Normalize institutional signals — can be object map or array
+        let instMap = {};
+        if (Array.isArray(institutionalSignals)) {
+            institutionalSignals.forEach(sig => {
+                if (sig?.symbol) instMap[sig.symbol] = sig;
+            });
+        } else if (institutionalSignals && typeof institutionalSignals === 'object') {
+            // could be { signals: [...], alerts: [...] } from institutionalTracker.getAllSignals()
+            if (Array.isArray(institutionalSignals.signals)) {
+                institutionalSignals.signals.forEach(sig => {
+                    if (sig?.symbol) instMap[sig.symbol] = sig;
+                });
+            } else {
+                instMap = institutionalSignals;
+            }
         }
 
         stocks.forEach(stock => {
             const secName = getSectorForSymbol(stock.symbol);
             const sector = sectorMap.get(secName);
 
-            const signal = this._analyzeStock(stock, sector, moodAnalysis, globalMood, globalPhase, globalSignal);
+            const signal = this._analyzeStock(
+                stock,
+                sector,
+                moodAnalysis,
+                globalMood,
+                globalPhase,
+                globalSignal,
+                flowMap[stock.symbol] || null,
+                instMap[stock.symbol] || null
+            );
             if (signal) {
                 signals.push(signal);
                 this._updatePosition(stock.symbol, signal);
@@ -61,7 +101,7 @@ class SmartMoneyTrendService {
         };
     }
 
-    _analyzeStock(stock, sector, moodAnalysis, globalMood, globalPhase, globalSignal) {
+    _analyzeStock(stock, sector, moodAnalysis, globalMood, globalPhase, globalSignal, flowData = null, instData = null) {
         // ─── DECLARE ALL VARIABLES AT TOP ────────────────────────────────
         const symbol = stock.symbol || '';
         const name = stock.name || symbol;
@@ -129,6 +169,55 @@ class SmartMoneyTrendService {
             factors.push(`Volume: ${(volume/avgVolume).toFixed(1)}x average`);
         }
 
+        // 6b. NEW: Order Flow Confluence (0-15)
+        if (flowData) {
+            if (flowData.signal === 'ACCUMULATION') {
+                score += 15;
+                factors.push('Flow: Accumulation (price up + buyers)');
+            } else if (flowData.signal === 'STRONG_BUY_FLOW') {
+                score += 10;
+                factors.push('Flow: Strong buy flow');
+            } else if (flowData.signal === 'BUYING_DIP') {
+                score += 5;
+                factors.push('Flow: Buying dip');
+            } else if (flowData.signal === 'DISTRIBUTION') {
+                score -= 15;
+                factors.push('Flow: Distribution (price up + sellers)');
+            } else if (flowData.signal === 'STRONG_SELL_FLOW') {
+                score -= 10;
+                factors.push('Flow: Strong sell flow');
+            }
+
+            // Additional value-based bias
+            if (flowData.buyRatioValue !== undefined) {
+                if (flowData.buyRatioValue > 60) {
+                    score += 5;
+                    factors.push(`Flow value: Buy-heavy (${flowData.buyRatioValue}%)`);
+                } else if (flowData.buyRatioValue < 40) {
+                    score -= 5;
+                    factors.push(`Flow value: Sell-heavy (${flowData.buyRatioValue}%)`);
+                }
+            }
+        }
+
+        // 6c. NEW: Institutional Tracker Confluence (0-20)
+        if (instData) {
+            const instSignal = instData.signal || instData.action || null;
+            if (instSignal === 'STRONG_INSTITUTIONAL_BUY') {
+                score += 20;
+                factors.push('🐋 Institutional: Strong buy');
+            } else if (instSignal === 'INSTITUTIONAL_BUY' || instSignal === 'BUILDING') {
+                score += 12;
+                factors.push('🐋 Institutional: Buying');
+            } else if (instSignal === 'DISTRIBUTION') {
+                score -= 20;
+                factors.push('🔴 Institutional: Distribution');
+            } else if (instSignal === 'WEAKENING') {
+                score -= 12;
+                factors.push('📉 Institutional: Weakening');
+            }
+        }
+
         // 7. Divergence penalty/bonus (0-10)
         const divergences = moodAnalysis?.divergences || [];
         const div = divergences.find(d => d.sector === sectorName);
@@ -144,7 +233,7 @@ class SmartMoneyTrendService {
 
         // ─── DETERMINE ACTION ────────────────────────────────────────────
         let action, actionEmoji, urgency, rationale, stopLoss, target;
-        const conviction = Math.min(100, Math.max(0, Math.abs(score) + 30));
+        const conviction = Math.min(100, Math.max(0, Math.abs(score) * 1.2 + 20));
 
         if (position) {
             if (score < -20) {

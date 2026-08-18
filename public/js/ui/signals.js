@@ -42,6 +42,7 @@ const UISignals = {
                 <div class="signal-reasons">
                     ${s.reasons.map(r => `<span class="signal-reason-tag">${r}</span>`).join('')}
                 </div>
+                ${s.smartMoneyConfluence ? `<div style="margin-top:4px"><span style="background:#7c3aed22;color:#a78bfa;padding:2px 8px;border-radius:4px;font-size:11px">🧠 ${s.smartMoneyConfluence.replace(/_/g, ' ')}</span></div>` : ''}
                 <div class="signal-trade-info">
                     <div class="entry"><label>Entry</label><br>${s.entryPrice?.toFixed(2)}</div>
                     <div class="target"><label>Target</label><br>${s.targetPrice?.toFixed(2)}</div>

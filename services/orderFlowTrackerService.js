@@ -209,6 +209,21 @@ class OrderFlowTrackerService {
                         lastPrice: stock.price,
                         vwap: 0,           // ✅ ADDED: running VWAP
                         vwapVolume: 0,     // ✅ ADDED: cumulative volume for VWAP
+
+                        // ─── NEW: Price + Volume Confluence ───────────
+                        priceChange: stock.changePercent || 0,
+                        volumeRatio: stock.volAvg10d > 0
+                            ? +(stock.volume / stock.volAvg10d).toFixed(2)
+                            : 0,
+                        buyValue: 0,
+                        sellValue: 0,
+                        vwapBuy: 0,
+                        vwapSell: 0,
+                        buyRatio: 50,
+                        buyRatioValue: 50,
+                        netFlowValue: 0,
+                        priceVolumeSignal: 'NEUTRAL',
+                        flowStrength: 0,
                         entries: []
                     };
                 }
@@ -229,6 +244,11 @@ class OrderFlowTrackerService {
                     if (classified.side === 'BUY') {
                         stockData.buyVolume += classified.volume;
                         stockData.buyTrades++;
+                        stockData.buyValue += classified.value;
+                        stockData.vwapBuy = stockData.buyVolume > 0
+                            ? stockData.buyValue / stockData.buyVolume
+                            : 0;
+
                         this.data.summary.totalBuyVolume += classified.volume;
                         this.data.summary.buyTrades++;
                         this.data.hourlyFlow[hourKey].buyVolume += classified.volume;
@@ -236,6 +256,11 @@ class OrderFlowTrackerService {
                     } else if (classified.side === 'SELL') {
                         stockData.sellVolume += classified.volume;
                         stockData.sellTrades++;
+                        stockData.sellValue += classified.value;
+                        stockData.vwapSell = stockData.sellVolume > 0
+                            ? stockData.sellValue / stockData.sellVolume
+                            : 0;
+
                         this.data.summary.totalSellVolume += classified.volume;
                         this.data.summary.sellTrades++;
                         this.data.hourlyFlow[hourKey].sellVolume += classified.volume;
@@ -288,7 +313,55 @@ class OrderFlowTrackerService {
 
                 // Update stock net flow
                 stockData.netFlow = stockData.buyVolume - stockData.sellVolume;
-                
+                stockData.netFlowValue = stockData.buyValue - stockData.sellValue;
+
+                // Volume-based buy ratio
+                const totalVol = stockData.buyVolume + stockData.sellVolume;
+                stockData.buyRatio = totalVol > 0
+                    ? +((stockData.buyVolume / totalVol) * 100).toFixed(1)
+                    : 50;
+
+                // Value-based buy ratio
+                const totalValue = stockData.buyValue + stockData.sellValue;
+                stockData.buyRatioValue = totalValue > 0
+                    ? +((stockData.buyValue / totalValue) * 100).toFixed(1)
+                    : 50;
+
+                // ─── NEW: Price + Volume Confluence Signal ────────────
+                const priceChg = stockData.priceChange || 0;
+                const buyRatio = stockData.buyRatio;
+                const volRatio = stockData.volumeRatio || 0;
+
+                let signal = 'NEUTRAL';
+                let strength = 0;
+
+                if (priceChg > 0.5 && buyRatio >= 55) {
+                    signal = 'ACCUMULATION';
+                    strength = Math.min(100, (buyRatio - 50) * 2 + Math.min(Math.abs(priceChg) * 6, 30));
+                    if (volRatio > 2) strength += 10;
+                } else if (priceChg > 0.5 && buyRatio <= 45) {
+                    signal = 'DISTRIBUTION';
+                    strength = Math.min(100, (50 - buyRatio) * 2 + Math.min(Math.abs(priceChg) * 6, 30));
+                    if (volRatio > 2) strength += 10;
+                } else if (priceChg < -0.5 && buyRatio >= 55) {
+                    signal = 'BUYING_DIP';
+                    strength = Math.min(100, (buyRatio - 50) * 2 + Math.min(Math.abs(priceChg) * 4, 20));
+                    if (volRatio > 2) strength += 10;
+                } else if (priceChg < -0.5 && buyRatio <= 45) {
+                    signal = 'DISTRIBUTION';
+                    strength = Math.min(100, (50 - buyRatio) * 2 + Math.min(Math.abs(priceChg) * 6, 30));
+                    if (volRatio > 2) strength += 10;
+                } else if (buyRatio > 60 && volRatio > 1.5) {
+                    signal = 'STRONG_BUY_FLOW';
+                    strength = 60;
+                } else if (buyRatio < 40 && volRatio > 1.5) {
+                    signal = 'STRONG_SELL_FLOW';
+                    strength = 60;
+                }
+
+                stockData.priceVolumeSignal = signal;
+                stockData.flowStrength = Math.min(100, strength);
+
                 this.trackedSymbols.add(symbol);
 
             } catch (e) {
@@ -451,6 +524,30 @@ class OrderFlowTrackerService {
             result[symbol] = total > 0 ? +((stock.buyVolume / total) * 100).toFixed(1) : 50;
         }
         return result;
+    }
+
+    /**
+     * 🔥 NEW: Full price + volume + flow confluence signals
+     * Returns detailed per-symbol analysis for frontend / signal service
+     */
+    getAllFlowSignals(limit = 30) {
+        return Object.entries(this.data.stocks)
+            .map(([symbol, data]) => ({
+                symbol,
+                name: data.name,
+                priceChange: data.priceChange || 0,
+                volumeRatio: data.volumeRatio || 0,
+                buyRatioVolume: data.buyRatio,
+                buyRatioValue: data.buyRatioValue,
+                netFlowVolume: data.netFlow,
+                netFlowValue: +data.netFlowValue.toFixed(2),
+                vwapBuy: data.vwapBuy ? +data.vwapBuy.toFixed(2) : 0,
+                vwapSell: data.vwapSell ? +data.vwapSell.toFixed(2) : 0,
+                signal: data.priceVolumeSignal,
+                strength: data.flowStrength || 0
+            }))
+            .sort((a, b) => b.strength - a.strength)
+            .slice(0, limit);
     }
 }
 

@@ -224,10 +224,28 @@ class TradingSignalService {
         return +target.toFixed(2);
     }
 
-    generateSignals(stocks, newsData, announcements, marketIndex = null, institutionalSignals = {}, orderFlowRatios = {}) {
+    generateSignals(stocks, newsData, announcements, marketIndex = null, institutionalSignals = {}, orderFlowRatios = {}, smartMoneySignals = []) {
         if (!stocks || !stocks.length) return [];
         const signals = [];
         const marketOpen = this.isMarketOpen();
+
+        // Normalize orderFlowRatios: accept array or object
+        let flowMap = {};
+        if (Array.isArray(orderFlowRatios)) {
+            for (const f of orderFlowRatios) {
+                flowMap[f.symbol] = f;
+            }
+        } else if (orderFlowRatios && typeof orderFlowRatios === 'object') {
+            flowMap = orderFlowRatios;
+        }
+
+        // Normalize Smart Money Trend signals
+        let smartMap = {};
+        if (Array.isArray(smartMoneySignals)) {
+            for (const sm of smartMoneySignals) {
+                if (sm?.symbol) smartMap[sm.symbol] = sm;
+            }
+        }
 
         for (const stock of stocks) {
             let score = 0;
@@ -341,13 +359,63 @@ class TradingSignalService {
                 else if (instData.signal === 'WEAKENING') { score -= 3; reasons.push('📉 Institutional weakening — conflict'); }
             }
 
-            // ✅ NEW: Confluence with order-flow tracker
-            const flowRatio = orderFlowRatios[stock.symbol];
-            if (flowRatio !== undefined) {
-                if (flowRatio > 60) { score += 3; reasons.push(`Order flow buy-heavy (${flowRatio}%)`); }
-                else if (flowRatio > 55) { score += 1; reasons.push('Order flow mildly buy-heavy'); }
-                else if (flowRatio < 40) { score -= 3; reasons.push(`Order flow sell-heavy (${flowRatio}%)`); }
-                else if (flowRatio < 45) { score -= 1; reasons.push('Order flow mildly sell-heavy'); }
+            // 🧠 NEW: Smart Money Trend confluence
+            const smartData = smartMap[stock.symbol] || null;
+            if (smartData) {
+                const smAction = smartData.action || '';
+                if (smAction === 'STRONG_ENTRY') {
+                    score += 6;
+                    reasons.push(`🧠 Smart Money: Strong entry (${smartData.conviction}%)`);
+                } else if (smAction === 'ENTRY') {
+                    score += 3;
+                    reasons.push(`🧠 Smart Money: Entry (${smartData.conviction}%)`);
+                } else if (smAction === 'ADD') {
+                    score += 2;
+                    reasons.push('🧠 Smart Money: Add to winner');
+                } else if (smAction === 'TRIM') {
+                    score -= 2;
+                    reasons.push('🧠 Smart Money: Trim position');
+                } else if (smAction === 'EXIT' || smAction === 'AVOID') {
+                    score -= 6;
+                    reasons.push(`🧠 Smart Money: ${smAction === 'EXIT' ? 'Exit' : 'Avoid'} signal`);
+                }
+            }
+
+            // ✅ NEW: Confluence with order-flow tracker (Price + Volume + Flow)
+            const flowData = flowMap[stock.symbol] || null;
+            if (flowData) {
+                // If flowData is a plain number (legacy), handle accordingly
+                if (typeof flowData === 'number') {
+                    if (flowData > 60) { score += 3; reasons.push(`Order flow buy-heavy (${flowData}%)`); }
+                    else if (flowData > 55) { score += 1; reasons.push('Order flow mildly buy-heavy'); }
+                    else if (flowData < 40) { score -= 3; reasons.push(`Order flow sell-heavy (${flowData}%)`); }
+                    else if (flowData < 45) { score -= 1; reasons.push('Order flow mildly sell-heavy'); }
+                } else {
+                    // Enhanced flow signal object
+                    if (flowData.signal === 'ACCUMULATION') { score += 4; reasons.push('🐋 Accumulation: price up + buyers active'); }
+                    else if (flowData.signal === 'STRONG_BUY_FLOW') { score += 3; reasons.push('💪 Strong buy flow'); }
+                    else if (flowData.signal === 'BUYING_DIP') { score += 2; reasons.push('🛒 Buying dip: dip being absorbed'); }
+                    else if (flowData.signal === 'DISTRIBUTION') { score -= 5; reasons.push('🔴 Distribution: price up + sellers dumping'); }
+                    else if (flowData.signal === 'STRONG_SELL_FLOW') { score -= 4; reasons.push('🔴 Strong sell flow'); }
+
+                    // Value-based bias
+                    if (flowData.buyRatioValue !== undefined) {
+                        if (flowData.buyRatioValue > 60) { score += 2; reasons.push(`Value flow buy-heavy (${flowData.buyRatioValue}%)`); }
+                        else if (flowData.buyRatioValue < 40) { score -= 2; reasons.push(`Value flow sell-heavy (${flowData.buyRatioValue}%)`); }
+                    }
+
+                    // Volume ratio confirmation
+                    if (flowData.volumeRatio > 2) {
+                        score += 1;
+                        reasons.push(`High vol participation (${flowData.volumeRatio.toFixed(1)}x)`);
+                    }
+
+                    // Strength score contribution
+                    if (flowData.strength >= 80) {
+                        score += 2;
+                        reasons.push('Strong flow conviction');
+                    }
+                }
             }
 
             // Trade Type Determination (setup-based, not score-based)
@@ -437,6 +505,7 @@ class TradingSignalService {
                     marketStatus: marketOpen ? 'MARKET_OPEN' : 'MARKET_CLOSED',
                     isBlueChip,
                     autoTradeEligible: isAutoTradable,
+                    smartMoneyConfluence: smartData ? smartData.action : null,
                     journalEligible,
                     qualityPassed: true
                 });

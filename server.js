@@ -258,7 +258,7 @@ async function buildSectorAnalysis() {
         announcements,
         signalMarketIndex,
         institutionalTracker.getAllSignals(),
-        orderFlowTracker.getAllBuyRatios()
+        orderFlowTracker.getAllFlowSignals()
     );
 
     // NEW: Pass marketIndex for mood detection
@@ -334,14 +334,36 @@ wss.on('connection', (ws) => {
     try { 
         const ns = await getQuickSignal(); 
         const ann = await getAnnouncements();
+
+        // Get sector analysis (contains institutionalMood + sectors)
+        const analysis = await buildSectorAnalysis();
+
+        // Generate Smart Money Trend signals using the analysis
+        const smartTrend = smartMoneyTrendService.generateSignals(
+            stockCache.stocks || [],
+            analysis.institutionalMood,
+            analysis.sectors,
+            orderFlowTracker.getAllFlowSignals(),
+            institutionalTracker.getAllSignals()
+        );
+
         const signalMarketIndex = {
             changePercent: stockCache.kse100?.changePercent || 0,
             advancers: (stockCache.stocks || []).filter(s => s.changePercent > 0).length,
             decliners: (stockCache.stocks || []).filter(s => s.changePercent < 0).length,
         };
+
         ws.send(JSON.stringify({ 
             type: 'TRADING_SIGNALS', 
-            data: tradingSignalService.generateSignals(stockCache.stocks || [], ns, ann, signalMarketIndex, institutionalTracker.getAllSignals(), orderFlowTracker.getAllBuyRatios()) 
+            data: tradingSignalService.generateSignals(
+                stockCache.stocks || [],
+                ns,
+                ann,
+                signalMarketIndex,
+                institutionalTracker.getAllSignals(),
+                orderFlowTracker.getAllFlowSignals(),
+                smartTrend.signals          // ← NEW: pass smart money signals
+            )
         })); 
     } catch (e) { 
         ws.send(JSON.stringify({ type: 'TRADING_SIGNALS', data: [] })); 
@@ -423,9 +445,16 @@ const entry = await institutionalTracker.analyzeStock(stock, ob); if (entry) res
         case 'GET_SMART_MONEY_SIGNALS':
             try {
                 const analysis = await buildSectorAnalysis();
+                const smartSignals = smartMoneyTrendService.generateSignals(
+                    stockCache.stocks || [],
+                    analysis.institutionalMood,          // mood from sector analysis
+                    analysis.sectors,                    // sector array
+                    orderFlowTracker.getAllFlowSignals(), // NEW: flow signals
+                    institutionalTracker.getAllSignals()  // NEW: institutional signals
+                );
                 ws.send(JSON.stringify({ 
                     type: 'SMART_MONEY_SIGNALS', 
-                    data: analysis.signals 
+                    data: smartSignals 
                 }));
             } catch (e) {
                 ws.send(JSON.stringify({ type: 'SMART_MONEY_SIGNALS', data: null }));
@@ -536,6 +565,19 @@ await institutionalTracker.analyzeStock(stock, ob); } const signals = institutio
                     signals: analysis.signals,
                     executiveSummary: analysis.executiveSummary
                 }
+            });
+
+            // 🧠 NEW: Broadcast Smart Money Trend signals
+            const smartSignals = smartMoneyTrendService.generateSignals(
+                stockCache.stocks || [],
+                analysis.institutionalMood,
+                analysis.sectors,
+                orderFlowTracker.getAllFlowSignals(),
+                institutionalTracker.getAllSignals()
+            );
+            broadcast({ 
+                type: 'SMART_MONEY_SIGNALS', 
+                data: smartSignals 
             });
         } catch (e) {}
     }, 120000);
