@@ -88,20 +88,28 @@ class TradingSignalService {
     }
 
     // ✅ NEW: Market regime check
-    isMarketHealthy(marketIndex) {
-        if (!marketIndex) return true;
-        // Don't trade if KSE-100 is down > 1.5%
-        if (marketIndex.changePercent < -1.5) return false;
-        // Don't trade if > 70% stocks are declining
-        if (marketIndex.decliners && marketIndex.advancers) {
+    isMarketHealthy(marketIndex, stocks) {
+        if (!marketIndex && !stocks) return true;
+
+        // KSE-100 check
+        if (marketIndex && marketIndex.changePercent < -1.5) return false;
+
+        // Breadth check – use provided advancers/decliners, or compute from stocks
+        if (marketIndex && marketIndex.advancers && marketIndex.decliners) {
             const total = marketIndex.advancers + marketIndex.decliners;
             if (total > 0 && (marketIndex.decliners / total) > 0.70) return false;
+        } else if (stocks && stocks.length > 0) {
+            const advancers = stocks.filter(s => s.changePercent > 0).length;
+            const decliners = stocks.filter(s => s.changePercent < 0).length;
+            const total = advancers + decliners;
+            if (total > 0 && (decliners / total) > 0.70) return false;
         }
+
         return true;
     }
 
     // ✅ NEW: Quality gate filter
-    passesQualityGate(stock, marketIndex) {
+    passesQualityGate(stock, marketIndex, stocks) {
         const g = this.constructor.QUALITY_GATES;
         const reasons = [];
         let passed = true;
@@ -128,7 +136,7 @@ class TradingSignalService {
         }
 
         // Market regime gate
-        if (!this.isMarketHealthy(marketIndex)) {
+        if (!this.isMarketHealthy(marketIndex, stocks)) {
             reasons.push('Market in downtrend');
             passed = false;
         }
@@ -148,6 +156,7 @@ class TradingSignalService {
     calculateSmartStop(stock, entryPrice, isBlueChip) {
         const g = this.constructor.QUALITY_GATES;
         const minStopPct = isBlueChip ? g.minStopPercent.blueChip : g.minStopPercent.standard;
+        const maxStopPct = isBlueChip ? 5 : 6; // NEW: maximum stop distance
 
         // 1. Support-based stop
         let stop = entryPrice * 0.97; // default 3%
@@ -167,12 +176,29 @@ class TradingSignalService {
             stop = minStopPrice;
         }
 
+        // 2b. NEW: Maximum % stop (prevents overly wide stops)
+        const maxStopPrice = entryPrice * (1 - maxStopPct / 100);
+        if (stop < maxStopPrice) {
+            stop = maxStopPrice;
+        }
+
         // 3. ATR-based stop (if ATR data available)
         if (stock.atr14 && stock.atr14 > 0) {
             const atrStop = entryPrice - (1.5 * stock.atr14);
             if (atrStop < stop) {
                 stop = atrStop;
             }
+        } else if (stock.high && stock.low && stock.high > stock.low) {
+            // Volatility proxy: 2x intraday range as ATR estimate
+            const volStop = entryPrice - (2 * (stock.high - stock.low));
+            if (volStop < stop) {
+                stop = volStop;
+            }
+        }
+
+        // 4. NEW: Final sanity – stop must be below entry for BUY
+        if (stop >= entryPrice) {
+            stop = entryPrice * 0.97;
         }
 
         return +stop.toFixed(2);
@@ -191,7 +217,7 @@ class TradingSignalService {
 
         if (hasValidR2 && stock.r2 > target) {
             target = stock.r2 * 0.995;
-        } else if (hasValidR1 && stock.r1 > target * 0.95) {
+        } else if (hasValidR1 && stock.r1 > target) {
             target = stock.r1;
         }
 
@@ -210,7 +236,7 @@ class TradingSignalService {
             const isBlueChip = this.constructor.BLUE_CHIPS.has(stock.symbol);
 
             // ✅ QUALITY GATE (NEW)
-            const quality = this.passesQualityGate(stock, marketIndex);
+            const quality = this.passesQualityGate(stock, marketIndex, stocks);
             if (!quality.passed) {
                 // Skip entirely — don't even show in frontend
                 continue;
@@ -324,18 +350,28 @@ class TradingSignalService {
                 else if (flowRatio < 45) { score -= 1; reasons.push('Order flow mildly sell-heavy'); }
             }
 
-            // Trade Type Determination
-            if (volRatio > 2 && Math.abs(stock.changePercent) > 2) type.push('DAY');
-            if (stock.rsi < 45 && stock.pe < 15 && stock.divYield > 0 && inUptrend) type.push('SWING');
-            if (score >= 10) { 
-                if (!type.includes('DAY')) type.push('DAY'); 
-                if (!type.includes('SWING')) type.push('SWING'); 
-            }
+            // Trade Type Determination (setup-based, not score-based)
+            const isDaySetup = volRatio > 1.5 && Math.abs(stock.changePercent) > 1.5 && this.isGoodEntryWindow();
+            const isSwingSetup = inUptrend && stock.rsi < 45 && stock.pe < 15 && stock.divYield > 0;
 
-            // ✅ Late-day penalty — DCR/PAEL/GATM all entered ~1:34 PM and struggled
+            if (isDaySetup) type.push('DAY');
+            if (isSwingSetup) type.push('SWING');
+
+            // Fallback only for very strong scores
+            if (!type.length && score >= 12) type.push('SWING');
+
+            // ✅ Late-day penalty — block new entries after 14:15, penalise after 14:00
+            const now = new Date();
+            const pkTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Karachi' }));
+            const currentMinutes = pkTime.getHours() * 60 + pkTime.getMinutes();
+            const lateEntryCutoff = 14 * 60 + 15; // 14:15
+
             if (!this.isGoodEntryWindow() && type.includes('DAY')) {
-                score -= 3;
-                reasons.push('Late entry — DAY only until 2:30 PM');
+                score -= 5;
+                reasons.push('Late entry — DAY blocked after 2:15 PM');
+            } else if (currentMinutes >= lateEntryCutoff && type.includes('SWING')) {
+                score -= 2;
+                reasons.push('Late SWING entry — prefer next session');
             }
 
             // ✅ Block WEAK_BUY from journal — SGPL WEAK_BUY lost -1670

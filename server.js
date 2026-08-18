@@ -246,11 +246,17 @@ async function buildSectorAnalysis() {
         getAnnouncements().catch(() => null)
     ]);
 
+    const signalMarketIndex = {
+        changePercent: stockCache.kse100?.changePercent || 0,
+        advancers: (stockCache.stocks || []).filter(s => s.changePercent > 0).length,
+        decliners: (stockCache.stocks || []).filter(s => s.changePercent < 0).length,
+    };
+
     const tradeSignals = tradingSignalService.generateSignals(
         stockCache.stocks || [],
         newsSignal,
         announcements,
-        stockCache.kse100,
+        signalMarketIndex,
         institutionalTracker.getAllSignals(),
         orderFlowTracker.getAllBuyRatios()
     );
@@ -328,9 +334,14 @@ wss.on('connection', (ws) => {
     try { 
         const ns = await getQuickSignal(); 
         const ann = await getAnnouncements();
+        const signalMarketIndex = {
+            changePercent: stockCache.kse100?.changePercent || 0,
+            advancers: (stockCache.stocks || []).filter(s => s.changePercent > 0).length,
+            decliners: (stockCache.stocks || []).filter(s => s.changePercent < 0).length,
+        };
         ws.send(JSON.stringify({ 
             type: 'TRADING_SIGNALS', 
-            data: tradingSignalService.generateSignals(stockCache.stocks || [], ns, ann, stockCache.kse100, institutionalTracker.getAllSignals(), orderFlowTracker.getAllBuyRatios()) 
+            data: tradingSignalService.generateSignals(stockCache.stocks || [], ns, ann, signalMarketIndex, institutionalTracker.getAllSignals(), orderFlowTracker.getAllBuyRatios()) 
         })); 
     } catch (e) { 
         ws.send(JSON.stringify({ type: 'TRADING_SIGNALS', data: [] })); 
